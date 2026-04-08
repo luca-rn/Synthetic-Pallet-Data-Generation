@@ -12,7 +12,11 @@ This pipeline renders randomised camera views of a EUR pallet (1.2 × 0.8 × 0.1
 |------|-------------|
 | `stage-setup.py` | Opens the USD scene, verifies scale/axis, and attaches a `pallet` semantic label. Run once per session before the replicator. |
 | `replicator_script_1.py` | Runs the Replicator loop — randomises camera pose, pallet rotation, and lighting, then writes annotated frames to disk. |
-| `.usd` files | USD files used as the stage entry point |
+| `---.usd` | USD files used as the stage entry point |
+
+## IMPORTANT - files path
+Path to the usd in `stage-setup` is hardcoded.
+Output dict is for writing is hardcoded in `replicator_sript_1.py`.
 
 ## Usage
 
@@ -21,8 +25,6 @@ Both scripts are run inside the **Isaac Sim Script Editor**.
 1. Open Isaac Sim.
 2. Run `stage-setup.py` to load and label the scene.
 3. Run `replicator_script_1.py` to generate the dataset.
-
-Output is written to `C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/SDG_output`.
 
 ## Output Annotations
 
