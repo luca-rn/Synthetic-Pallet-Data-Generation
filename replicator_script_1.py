@@ -31,19 +31,17 @@ H_APERTURE: float     = 6.4             # mm, 1/2" sensor
 # Spherical camera sampling around pallet centre (0, 0.072, 0)
 PALLET_CENTRE: Tuple[float, float, float]     = (0.0, 0.072, 0.0)
 
-CAM_DIST_MIN: float    = 0.8             # metres — closest the camera gets
-CAM_DIST_MAX: float   = 1.5             # metres — furthest the camera gets
-#CAM_DIST_MIN: float                           = 1.5       # metres — closest the camera gets
-#CAM_DIST_MAX: float                           = 3.0       # metres — furthest the camera gets
+CAM_DIST_MIN: float    = 1.3             # metres — closest the camera gets
+CAM_DIST_MAX: float    = 2.3             # metres — furthest the camera gets
 CAM_ELEV_MIN: float                           = 15.0      # degrees above horizon — avoids ground-level shots
 CAM_ELEV_MAX: float                           = 75.0      # degrees — avoids pure top-down shots
 
 # Light randomization
-KEY_INT_MIN: float                            = 300.0
-KEY_INT_MAX: float                            = 4000.0
-FILL_INT_MIN: float                           = 100.0
+KEY_INT_MIN: float                            = 1000.0
+KEY_INT_MAX: float                            = 6000.0
+FILL_INT_MIN: float                           = 300.0
 FILL_INT_MAX: float                           = 800.0
-DOME_INT_MIN: float                           = 100.0
+DOME_INT_MIN: float                           = 300.0
 DOME_INT_MAX: float                           = 800.0
 # Pallet rotation
 PALLET_ROTATIONS: List[Tuple[int, int, int]]  = [(0,0,0), (0,90,0), (0,180,0), (0,270,0)]
@@ -165,3 +163,4 @@ with rep.new_layer():
     
 rep.orchestrator.run()
 print(f"[Replicator] Done. {NUM_FRAMES} frames written to {OUTPUT_DIR}")
+

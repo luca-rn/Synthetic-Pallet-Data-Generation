@@ -5,7 +5,7 @@ Run this at the start of a session, or to reset the scene to a clean known state
 Stage units: metres (meters_per_unit = 1.0), Y-up
 Pallet real-world size: 1.2 x 0.8 x 0.144m (EUR pallet)
 
-Paste into Isaac Sim Script Editor and run.
+run in Isaac Sim Script Editor.
 """
 
 import omni.usd
@@ -14,7 +14,7 @@ from pxr import UsdGeom, Sdf, Usd
 
 # config
 
-USD_PATH: str    = "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/Euro-pal.usd"
+USD_PATH: str    = "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/Euro-pal-floor.usd"
 PALLET_PATH: str = "/scene/Meshes" # root of all geometry
 
 # open stage
