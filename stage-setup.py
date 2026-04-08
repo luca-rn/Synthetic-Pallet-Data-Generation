@@ -1,49 +1,46 @@
 """
 stage_setup.py — Pallet SDG Stage Setup
-Run this ONCE at the start of a session, or whenever you want to reset
-the scene to a clean known state.
+Run this at the start of a session, or to reset the scene to a clean known state.
 
-Usage: paste into Isaac Sim Script Editor and run.
+Stage units: metres (meters_per_unit = 1.0), Y-up
+Pallet real-world size: 1.2 x 0.8 x 0.144m (EUR pallet)
+
+Paste into Isaac Sim Script Editor and run.
 """
 
 import omni.usd
-from pxr import UsdGeom, UsdShade, Sdf
+import omni.kit.app
+from pxr import UsdGeom, Sdf, Usd
 
-# ---------------------------------------------------------------------------
-# CONFIG
-# ---------------------------------------------------------------------------
+# config
 
-USD_PATH    = "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/Euro-pal.usd"
-PALLET_PATH = "/scene/Meshes"   # root of all pallet geometry
+USD_PATH: str    = "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/Euro-pal.usd"
+PALLET_PATH: str = "/scene/Meshes" # root of all geometry
 
-# ---------------------------------------------------------------------------
-# 1. OPEN THE STAGE
-# ---------------------------------------------------------------------------
+# open stage
 
 omni.usd.get_context().open_stage(USD_PATH)
-import omni.kit.app
-app = omni.kit.app.get_app()
+
+app: omni.kit.app.IApp = omni.kit.app.get_app()
 for _ in range(5):
     app.update()
-
-stage = omni.usd.get_context().get_stage()
+ 
+stage: Usd.Stage = omni.usd.get_context().get_stage()
 print("[Setup] Stage opened")
+print(f"[Setup] meters_per_unit: {UsdGeom.GetStageMetersPerUnit(stage)}")
+print(f"[Setup] up_axis: {UsdGeom.GetStageUpAxis(stage)}")
 
-# ---------------------------------------------------------------------------
-# 2. VERIFY SCALE AND POSITION  (already baked in the USD, just confirming)
-# ---------------------------------------------------------------------------
+# verifying scale and position  (already in the USD, just confirming)
 
-scene = stage.GetPrimAtPath("/scene")
-xform = UsdGeom.Xformable(scene)
-ops = {op.GetOpName(): op.Get() for op in xform.GetOrderedXformOps()}
-print(f"[Setup] Scale:     {ops.get('xformOp:scale')}")
-print(f"[Setup] Translate: {ops.get('xformOp:translate')}")
+scene: Usd.Prim = stage.GetPrimAtPath("/scene")
+xform: UsdGeom.Xformable = UsdGeom.Xformable(scene)
+op: UsdGeom.XformOp
+for op in xform.GetOrderedXformOps():
+    print(f"[Setup] {op.GetOpName()} = {op.Get()}")
 
-# ---------------------------------------------------------------------------
-# 3. SEMANTIC LABEL
-# ---------------------------------------------------------------------------
+# Attaching semantic label
 
-meshes = stage.GetPrimAtPath(PALLET_PATH)
+meshes: Usd.Prim = stage.GetPrimAtPath(PALLET_PATH)
 if not meshes.IsValid():
     print(f"[Setup] ERROR: prim not found at {PALLET_PATH}")
 else:
@@ -55,9 +52,7 @@ else:
     ).Set("pallet")
     print(f"[Setup] Semantic label 'pallet' applied to {PALLET_PATH}")
 
-# ---------------------------------------------------------------------------
-# 4. SAVE
-# ---------------------------------------------------------------------------
+# SAVE
 
 omni.usd.get_context().save_stage()
 print(f"[Setup] Stage saved to {USD_PATH}")
