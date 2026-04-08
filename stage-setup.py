@@ -44,12 +44,7 @@ meshes: Usd.Prim = stage.GetPrimAtPath(PALLET_PATH)
 if not meshes.IsValid():
     print(f"[Setup] ERROR: prim not found at {PALLET_PATH}")
 else:
-    meshes.CreateAttribute(
-        "semantics:params:semanticType", Sdf.ValueTypeNames.String, custom=True
-    ).Set("class")
-    meshes.CreateAttribute(
-        "semantics:params:semanticData", Sdf.ValueTypeNames.String, custom=True
-    ).Set("pallet")
+    rep.utils._set_semantics_legacy(meshes, [("class", "pallet")])
     print(f"[Setup] Semantic label 'pallet' applied to {PALLET_PATH}")
 
 # SAVE
