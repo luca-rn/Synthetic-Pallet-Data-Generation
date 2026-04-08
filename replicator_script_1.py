@@ -24,14 +24,17 @@ PALLET_PATH: str                              = "/scene/Meshes"
 OUTPUT_DIR: str                               = "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/SDG_output"
 NUM_FRAMES: int                               = 50
 # Camera intrinsics - need to match to real camera later
-RESOLUTION: Tuple[int, int]                   = (1280, 720)
-FOCAL_LENGTH: float                           = 24.0      # mm
-H_APERTURE: float                             = 20.955    # mm
+RESOLUTION: Tuple[int, int]      = (2448, 2048)    # actual M70 resolution
+FOCAL_LENGTH: float    = 5.94            # mm, derived from FOV
+H_APERTURE: float     = 6.4             # mm, 1/2" sensor
 
 # Spherical camera sampling around pallet centre (0, 0.072, 0)
 PALLET_CENTRE: Tuple[float, float, float]     = (0.0, 0.072, 0.0)
-CAM_DIST_MIN: float                           = 1.5       # metres — closest the camera gets
-CAM_DIST_MAX: float                           = 3.0       # metres — furthest the camera gets
+
+CAM_DIST_MIN: float    = 0.8             # metres — closest the camera gets
+CAM_DIST_MAX: float   = 1.5             # metres — furthest the camera gets
+#CAM_DIST_MIN: float                           = 1.5       # metres — closest the camera gets
+#CAM_DIST_MAX: float                           = 3.0       # metres — furthest the camera gets
 CAM_ELEV_MIN: float                           = 15.0      # degrees above horizon — avoids ground-level shots
 CAM_ELEV_MAX: float                           = 75.0      # degrees — avoids pure top-down shots
 
