@@ -38,7 +38,7 @@ CAM_ELEV_MAX: float                           = 75.0      # degrees — avoids p
 
 # Light randomization
 KEY_INT_MIN: float                            = 1000.0
-KEY_INT_MAX: float                            = 6000.0
+KEY_INT_MAX: float                            = 7000.0
 FILL_INT_MIN: float                           = 300.0
 FILL_INT_MAX: float                           = 800.0
 DOME_INT_MIN: float                           = 300.0
