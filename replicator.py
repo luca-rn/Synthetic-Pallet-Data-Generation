@@ -3,7 +3,7 @@ replicator_script_1.py — Pallet Synthetic Data Generation
 Run after stage_setup.py
 
 GUI usage - run in Isaac Sim Script Editor.
- 
+
 Headless usage:
     ./isaac-sim.headless.bat --/omni/replicator/script="replicator_script_1.py"
         --output-dir "C:/my_output"
@@ -83,7 +83,7 @@ def sample_camera_positions(
     """
     Sample n camera positions on a sphere around centre.
     elevation is clamped to avoid ground-level or pure top-down shots.
- 
+
     Args:
         n:            Number of positions to sample.
         centre:       World-space target point (pallet centre).
@@ -91,7 +91,7 @@ def sample_camera_positions(
         dist_max:     Maximum distance from centre in metres.
         elev_min_deg: Minimum elevation angle in degrees (above horizon).
         elev_max_deg: Maximum elevation angle in degrees.
- 
+
     Returns:
         List of (x, y, z) camera positions in world space.
     """
@@ -100,18 +100,18 @@ def sample_camera_positions(
         distance: float  = random.uniform(dist_min, dist_max)
         azimuth: float   = random.uniform(0.0, 360.0)          # degrees, full circle
         elevation: float = random.uniform(elev_min_deg, elev_max_deg)  # degrees
- 
+
         az_rad: float    = math.radians(azimuth)
         el_rad: float    = math.radians(elevation)
- 
+
         x: float = centre[0] + distance * math.cos(el_rad) * math.sin(az_rad)
         y: float = centre[1] + distance * math.sin(el_rad)
         z: float = centre[2] + distance * math.cos(el_rad) * math.cos(az_rad)
- 
+
         positions.append((x, y, z))
- 
+
     return positions
- 
+
 def create_camera() -> HydraTexture:
     # Create the SDG camera and render product matching given intrinsics
     camera = rep.create.camera(
@@ -128,11 +128,11 @@ def create_lights() -> Tuple:
     key_light = rep.create.light(
         light_type="Distant", intensity=600,
         color=(1.0, 0.97, 0.9), rotation=(225, 0, 0), name="KeyLight")
-    
+
     fill_light = rep.create.light(
         light_type="Sphere", intensity=400,
         color=(0.8, 0.85, 1.0), position=(-3.0, 2.0, 1.0), name="FillLight")
-    
+
     dome_light = rep.create.light(light_type="Dome", intensity=300, name="DomeLight")
     return key_light, fill_light, dome_light
 
@@ -157,14 +157,14 @@ def randomize_lights(
         rep.modify.attribute("inputs:intensity", rep.distribution.uniform(key_int_min, key_int_max))
         rep.modify.attribute("inputs:color",     rep.distribution.uniform((0.85,0.75,0.6), (1.0,1.0,1.0)))
         rep.modify.pose(rotation=rep.distribution.uniform((225,-15,0), (245,15,0)))
- 
+
     with fill_light:
         rep.modify.pose(position=rep.distribution.uniform((-4.0,1.0,-3.0), (4.0,4.0,3.0)))
         rep.modify.attribute("inputs:intensity", rep.distribution.uniform(fill_int_min, fill_int_max))
- 
+
     with dome_light:
         rep.modify.attribute("inputs:intensity", rep.distribution.uniform(dome_int_min, dome_int_max))
- 
+
 def attach_writer(render_product: HydraTexture, output_dir: str) -> Writer:
     #Initialise BasicWriter with all required annotators and attach to render product
     writer: Writer = rep.WriterRegistry.get("BasicWriter")
@@ -185,7 +185,7 @@ def attach_writer(render_product: HydraTexture, output_dir: str) -> Writer:
 
 def main() -> None:
     args = parse_args()
- 
+
     camera_positions: List[Tuple[float, float, float]] = sample_camera_positions(
         n=args.num_frames,
         centre=PALLET_CENTRE,
@@ -196,11 +196,11 @@ def main() -> None:
     )
 
     with rep.new_layer():
- 
+
         pallet = rep.get.prim_at_path(args.pallet_path)
         camera, render_product = create_camera()
         key_light, fill_light, dome_light = create_lights()
- 
+
         with rep.trigger.on_frame(max_execs=args.num_frames):
             randomize_camera(camera, camera_positions, args.pallet_path)
             randomize_pallet(pallet)
@@ -212,7 +212,7 @@ def main() -> None:
             )
 
         attach_writer(render_product, args.output_dir)
- 
+
     rep.orchestrator.run()
     print(f"[Replicator] Done. {args.num_frames} frames written to {args.output_dir}")
 
