@@ -30,6 +30,12 @@ DEFAULTS = {
     "pallet_path":  "/scene/Meshes",
     "output_dir":   "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/SDG_output",
     "num_frames":   5, # Set low to avoid accidental large runs
+    # Textures
+    "wood_textures_planks" : ["C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/isaac_sims/textures/plywood_diff_4k.jpg",
+                              "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/isaac_sims/textures/Texturelabs_Wood_266L.jpg",
+    "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/isaac_sims/textures/Texturelabs_Wood_268L.jpg"],
+    "wood_textures_blocks" : ["C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/isaac_sims/textures/plywood_diff_4k.jpg",
+                              "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/isaac_sims/textures/wood_worn.jpg"],
     # How close to pallet
     "cam_dist_min": 1.3,
     "cam_dist_max": 2.3,
@@ -69,6 +75,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--fill-int-max", type=float, default=DEFAULTS["fill_int_max"])
     parser.add_argument("--dome-int-min", type=float, default=DEFAULTS["dome_int_min"])
     parser.add_argument("--dome-int-max", type=float, default=DEFAULTS["dome_int_max"])
+    parser.add_argument("--wood-textures-planks", type= List(str), default=DEFAULTS["wood_textures_planks"])
+    parser.add_argument("--wood-textures-blocks", type= List(str), default=DEFAULTS["wood_textures_blocks"])
     args, _ = parser.parse_known_args(sys.argv[1:])
     return args
 
@@ -164,6 +172,19 @@ def randomize_lights(
 
     with dome_light:
         rep.modify.attribute("inputs:intensity", rep.distribution.uniform(dome_int_min, dome_int_max))
+
+def randomize_material(wood_textures_planks, wood_textures_blocks) -> None:
+    #Randomize base texture of wood each frame
+    with rep.get.material("/scene/Materials/Material_003"):
+        rep.modify.attribute(
+            "inputs:file",
+            rep.distribution.choice(wood_textures_planks)
+        )
+    with rep.get.material("/scene/Materials/Material_002"):
+        rep.modify.attribute(
+            "inputs:file",
+            rep.distribution.choice(wood_textures_blocks)
+        )
 
 def attach_writer(render_product: HydraTexture, output_dir: str) -> Writer:
     #Initialise BasicWriter with all required annotators and attach to render product

@@ -13,6 +13,7 @@ This pipeline renders randomised camera views of a EUR pallet (1.2 × 0.8 × 0.1
 | `stage-setup.py` | Opens the USD scene, verifies scale/axis, and attaches a `pallet` semantic label. Run once per session before the replicator. |
 | `replicator_script_1.py` | Runs the Replicator loop — randomises camera pose, pallet rotation, and lighting, then writes annotated frames to disk. |
 | `---.usd` | USD files used as the stage entry point |
+| `example_output` | Contains the output of a test run of the replicator script - with NUM_FRAMES = 10 |
 
 ## IMPORTANT - files path
 Path to the usd in `stage-setup` is hardcoded.
