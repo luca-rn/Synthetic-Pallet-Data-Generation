@@ -21,7 +21,7 @@ import omni.replicator.core as rep
 from pxr import UsdGeom, Usd
  
 DEFAULTS = {
-    "usd_path":    "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/Euro-pal-floor.usd",
+    "usd_path":    "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/warehousepal.usd",
     "pallet_path": "/scene/Meshes",
 }
  
@@ -84,3 +84,5 @@ def main() -> None:
  
 if __name__ == "__main__":
     main()
+
+
