@@ -35,7 +35,7 @@ DEFAULTS = {
         "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/isaac_sims/textures/Texturelabs_Wood_266L.jpg",
         "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/isaac_sims/textures/Texturelabs_Wood_266L.jpg"],
 
-    "num_frames":   5, # Set low to avoid accidental large runs
+    "num_frames":   15, # Set low to avoid accidental large runs
     # How close to pallet
     "cam_dist_min": 1.3,
     "cam_dist_max": 2.3,
@@ -43,8 +43,8 @@ DEFAULTS = {
     "cam_elev_min": 15.0,
     "cam_elev_max": 75.0,
     # Light randomization limits
-    "key_int_min":  300.0,
-    "key_int_max":  7000.0,
+    "key_int_min":  2000.0,
+    "key_int_max":  8000.0,
     "fill_int_min": 300.0,
     "fill_int_max": 800.0,
     "dome_int_min": 300.0,
@@ -172,7 +172,7 @@ def randomize_lights(
     with dome_light:
         rep.modify.attribute("inputs:intensity", rep.distribution.uniform(dome_int_min, dome_int_max))
 
-def randomize_material_properties(wood_textures) -> None:
+def randomize_wood_texture(wood_textures: List[str]) -> None:
     #Randomize base colour texture on wood materials each frame
     texture = rep.distribution.choice(wood_textures)
     with rep.get.material("/scene/Materials/Material_003"):
@@ -225,6 +225,7 @@ def main() -> None:
                 args.fill_int_min, args.fill_int_max,
                 args.dome_int_min, args.dome_int_max,
             )
+            randomize_wood_texture(args.wood_textures)
 
         attach_writer(render_product, args.output_dir)
 
@@ -233,3 +234,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
