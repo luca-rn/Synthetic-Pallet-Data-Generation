@@ -15,6 +15,7 @@ import argparse
 import math
 import random
 import sys
+import asyncio
 from typing import List, Tuple
 
 import omni.replicator.core as rep
@@ -31,11 +32,12 @@ DEFAULTS = {
     "output_dir":   "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/SDG_output",
     # Wood Textures
     "wood_textures": 
-        ["C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/isaac_sims/textures/plywood_diff_4k.jpg",
-        "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/isaac_sims/textures/Texturelabs_Wood_266L.jpg",
-        "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/isaac_sims/textures/Texturelabs_Wood_266L.jpg"],
+        ["C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/textures/plywood_diff_4k.jpg",
+        "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/textures/Texturelabs_Wood_266L.jpg",
+       # "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/textures/Texturelabs_Wood_267L.jpg",
+        "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/textures/Texturelabs_Wood_268L.jpg"],
 
-    "num_frames":   15, # Set low to avoid accidental large runs
+    "num_frames":   10, # Set low to avoid accidental large runs
     # How close to pallet
     "cam_dist_min": 1.3,
     "cam_dist_max": 2.3,
@@ -44,7 +46,7 @@ DEFAULTS = {
     "cam_elev_max": 75.0,
     # Light randomization limits
     "key_int_min":  2000.0,
-    "key_int_max":  8000.0,
+    "key_int_max":  7000.0,
     "fill_int_min": 300.0,
     "fill_int_max": 800.0,
     "dome_int_min": 300.0,
@@ -172,13 +174,14 @@ def randomize_lights(
     with dome_light:
         rep.modify.attribute("inputs:intensity", rep.distribution.uniform(dome_int_min, dome_int_max))
 
-def randomize_wood_texture(wood_textures: List[str]) -> None:
+def randomize_wood_texture(pallet, wood_textures: List[str]) -> None:
     #Randomize base colour texture on wood materials each frame
     texture = rep.distribution.choice(wood_textures)
-    with rep.get.material("/scene/Materials/Material_003"):
-        rep.modify.attribute("inputs:file",texture)
-    with rep.get.material("/scene/Materials/Material_002"):
-        rep.modify.attribute("inputs:file",texture)
+    with rep.get.prims(semantics=[("class", "pallet")]):
+        rep.randomizer.texture(
+            textures=texture,
+            per_sub_mesh=False,
+        )
 
 def attach_writer(render_product: HydraTexture, output_dir: str) -> Writer:
     #Initialise BasicWriter with all required annotators and attach to render product
@@ -197,6 +200,9 @@ def attach_writer(render_product: HydraTexture, output_dir: str) -> Writer:
     )
     writer.attach([render_product])
     return writer
+    
+async def run_replicator(num_frames: int) -> None:
+    await rep.orchestrator.run_async(num_frames=num_frames)
 
 def main() -> None:
     args = parse_args()
@@ -216,7 +222,8 @@ def main() -> None:
         camera, render_product = create_camera()
         key_light, fill_light, dome_light = create_lights()
 
-        with rep.trigger.on_frame(max_execs=args.num_frames):
+
+        with rep.trigger.on_frame(max_execs=args.num_frames, rt_subframes=4):
             randomize_camera(camera, camera_positions, args.pallet_path)
             randomize_pallet(pallet)
             randomize_lights(
@@ -225,13 +232,14 @@ def main() -> None:
                 args.fill_int_min, args.fill_int_max,
                 args.dome_int_min, args.dome_int_max,
             )
-            randomize_wood_texture(args.wood_textures)
+            randomize_wood_texture(pallet, args.wood_textures)
 
         attach_writer(render_product, args.output_dir)
 
-    rep.orchestrator.run()
+    asyncio.ensure_future(run_replicator(args.num_frames))
     print(f"[Replicator] Done. {args.num_frames} frames written to {args.output_dir}")
 
 if __name__ == "__main__":
     main()
+
 
