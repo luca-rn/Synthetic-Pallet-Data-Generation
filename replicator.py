@@ -10,6 +10,7 @@ Headless usage:
         --num-frames 500
         --cam-dist-min 1.3
         --cam-dist-max 2.3
+        --wood-textures "/path/to/textures/*"
 """
 import argparse
 import math
@@ -28,7 +29,7 @@ print("Running replicator script...")
 # Config
 
 DEFAULTS = {
-    "pallet_path":  "/scene/Meshes",
+    "pallet_path":  "/scene/Meshes", # Path to the pallet within Isaac Sim - Set up by stage-setup.py
     "output_dir":   "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/SDG_output",
     # Wood Textures
     "wood_textures": 
