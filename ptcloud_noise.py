@@ -1,6 +1,8 @@
 """
 add_noise.py — Post-processing noise for synthetic point clouds
 
+Requires open3d to run visualisation - available on python 3.8 - 3.11
+
 Usage:
     uv run add_noise.py --pointcloud pointcloud_0000.npy
                         --rgba pointcloud_rgb_0000.npy
