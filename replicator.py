@@ -181,7 +181,7 @@ def randomize_wood_texture(pallet, wood_textures: List[str]) -> None:
     with rep.get.prims(semantics=[("class", "pallet")]):
         rep.randomizer.texture(
             textures=texture,
-            per_sub_mesh=False,
+            per_sub_mesh=False, # False to ensure all wood elements are same texture - unfortunately assigns texture to nails
         )
 
 def attach_writer(render_product: HydraTexture, output_dir: str) -> Writer:
@@ -196,6 +196,8 @@ def attach_writer(render_product: HydraTexture, output_dir: str) -> Writer:
         instance_segmentation=True,
         semantic_segmentation=True,
         distance_to_camera=True,
+        pointcloud=True,
+        pointcloud_include_unlabelled=False,
         normals=True,
         camera_params=True,
     )
