@@ -1,0 +1,11 @@
+numpy
+scipy
+open3d
+
+# The following packages are bundled with NVIDIA Isaac Sim and are not
+# available via pip. Run replicator.py and stage-setup.py inside the
+# Isaac Sim Python environment.
+# omni.replicator.core
+# omni.usd
+# omni.kit.app
+# pxr (OpenUSD)
