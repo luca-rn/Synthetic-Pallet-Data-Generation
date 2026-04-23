@@ -10,7 +10,7 @@ Headless usage:
         --num-frames 500
         --cam-dist-min 1.3
         --cam-dist-max 2.3
-        --wood-textures "/path/to/textures/*"
+        --textures "/path/to/textures/*"
 """
 import argparse
 import math
@@ -31,8 +31,8 @@ print("Running replicator script...")
 DEFAULTS = {
     "pallet_path":  "/scene/Meshes", # Path to the pallet within Isaac Sim - Set up by stage-setup.py
     "output_dir":   "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/SDG_output",
-    # Wood Textures
-    "wood_textures": 
+    # Textures
+    "textures": 
         ["C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/textures/plywood_diff_4k.jpg",
         "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/textures/Texturelabs_Wood_266L.jpg",
        # "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/textures/Texturelabs_Wood_267L.jpg",
@@ -54,17 +54,23 @@ DEFAULTS = {
     "dome_int_max": 800.0,
 }
 
+ACCEPTED_PALLET_TYPES: List[str] = ["epal","nlp"]
+
 # Camera intrinsics - need to match to real camera later
 RESOLUTION: Tuple[int, int]      = (2448, 2048)    # Zivid 2 M70 resolution
 FOCAL_LENGTH: float    = 5.94            # mm, derived from FOV
 H_APERTURE: float     = 6.4             # mm, 1/2" sensor
 
-PALLET_CENTRE: Tuple[float, float, float]     = (0.0, 0.072, 0.0)
+PALLET_CENTRE: dict[str, Tuple[float, float, float]] = {
+    "epal": (0.0, 0.072, 0.0),
+    "nlp":  (0.0, 0.075, 0.0),
+}
 PALLET_ROTATIONS: List[Tuple[int, int, int]]  = [(0,0,0), (0,90,0), (0,180,0), (0,270,0)]
 
 def parse_args() -> argparse.Namespace:
     """Parse CLI arguments, falling back to defaults if not provided."""
     parser = argparse.ArgumentParser(description="Pallet SDG Replicator")
+    parser.add_argument("--pallet-type", type=str, default="epal")
     parser.add_argument("--pallet-path",  type=str,   default=DEFAULTS["pallet_path"])
     parser.add_argument("--output-dir",   type=str,   default=DEFAULTS["output_dir"])
     parser.add_argument("--num-frames",   type=int,   default=DEFAULTS["num_frames"])
@@ -78,9 +84,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--fill-int-max", type=float, default=DEFAULTS["fill_int_max"])
     parser.add_argument("--dome-int-min", type=float, default=DEFAULTS["dome_int_min"])
     parser.add_argument("--dome-int-max", type=float, default=DEFAULTS["dome_int_max"])
-    parser.add_argument("--wood-textures", type=List[str], default=DEFAULTS["wood_textures"])
+    parser.add_argument("--textures", type=List[str], default=DEFAULTS["textures"])
     args, _ = parser.parse_known_args(sys.argv[1:])
     return args
+
+def check_pallet_type(pal_type: str) -> str:
+    if not pal_type in ACCEPTED_PALLET_TYPES:
+        sys.exit(f"Error: Unacceptable pallet type: {pal_type}")
+    return pal_type
 
 # Spherical Camera Placement
 def sample_camera_positions(
@@ -175,14 +186,16 @@ def randomize_lights(
     with dome_light:
         rep.modify.attribute("inputs:intensity", rep.distribution.uniform(dome_int_min, dome_int_max))
 
-def randomize_wood_texture(pallet, wood_textures: List[str]) -> None:
-    #Randomize base colour texture on wood materials each frame
-    texture = rep.distribution.choice(wood_textures)
-    with rep.get.prims(semantics=[("class", "pallet")]):
-        rep.randomizer.texture(
-            textures=texture,
-            per_sub_mesh=False, # False to ensure all wood elements are same texture - unfortunately assigns texture to nails
-        )
+def randomize_texture(pallet, pallet_type: str, textures: List[str]) -> None:
+    #Randomize base colour texture on materials each frame
+    # Just wood at the moment
+    texture = rep.distribution.choice(textures)
+    if pallet_type == "epal":
+        with rep.get.prims(semantics=[("class", "pallet")]):
+            rep.randomizer.texture(
+                textures=texture,
+                per_sub_mesh=False, # False to ensure all wood elements are same texture - unfortunately assigns texture to nails
+            )
 
 def attach_writer(render_product: HydraTexture, output_dir: str) -> Writer:
     #Initialise BasicWriter with all required annotators and attach to render product
@@ -196,8 +209,8 @@ def attach_writer(render_product: HydraTexture, output_dir: str) -> Writer:
         instance_segmentation=True,
         semantic_segmentation=True,
         distance_to_camera=True,
-        pointcloud=True,
-        pointcloud_include_unlabelled=False,
+        #pointcloud=True,
+        #pointcloud_include_unlabelled=False,
         normals=True,
         camera_params=True,
     )
@@ -209,10 +222,11 @@ async def run_replicator(num_frames: int) -> None:
 
 def main() -> None:
     args = parse_args()
+    pal_type: str = check_pallet_type(args.pallet_type)
 
     camera_positions: List[Tuple[float, float, float]] = sample_camera_positions(
         n=args.num_frames,
-        centre=PALLET_CENTRE,
+        centre=PALLET_CENTRE[pal_type],
         dist_min=args.cam_dist_min,
         dist_max=args.cam_dist_max,
         elev_min_deg=args.cam_elev_min,
@@ -235,7 +249,7 @@ def main() -> None:
                 args.fill_int_min, args.fill_int_max,
                 args.dome_int_min, args.dome_int_max,
             )
-            randomize_wood_texture(pallet, args.wood_textures)
+            randomize_texture(pallet, pal_type, args.textures)
 
         attach_writer(render_product, args.output_dir)
 
