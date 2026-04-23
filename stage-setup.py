@@ -46,15 +46,16 @@ def open_stage(usd_path: str) -> Usd.Stage:
     print(f"[Setup] up_axis: {UsdGeom.GetStageUpAxis(stage)}")
     return stage
  
- 
 def verify_scale(stage: Usd.Stage) -> None:
     #Print the scale and translate ops on /scene to confirm they are correct
     scene: Usd.Prim = stage.GetPrimAtPath("/scene")
+    if not scene.IsValid():
+        print(f"[Setup] WARNING: /scene prim not found — skipping scale verification")
+        return
     xform: UsdGeom.Xformable = UsdGeom.Xformable(scene)
     op: UsdGeom.XformOp
     for op in xform.GetOrderedXformOps():
         print(f"[Setup] {op.GetOpName()} = {op.Get()}")
- 
  
 def apply_semantic_label(stage: Usd.Stage, pallet_path: str) -> None:
     #Apply semantic label to the pallet prim via Replicator's SemanticsAPI
@@ -65,12 +66,10 @@ def apply_semantic_label(stage: Usd.Stage, pallet_path: str) -> None:
     rep.utils._set_semantics_legacy(meshes, [("class", "pallet")])
     print(f"[Setup] Semantic label 'pallet' applied to {pallet_path}")
  
- 
 def save_stage(usd_path: str) -> None:
     #Save the current stage
     omni.usd.get_context().save_stage()
     print(f"[Setup] Stage saved to {usd_path}")
- 
  
 def main() -> None:
     args = parse_args()
