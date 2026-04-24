@@ -197,6 +197,18 @@ def randomize_texture(pallet, pallet_type: str, textures: List[str]) -> None:
                 per_sub_mesh=False, # False to ensure all wood elements are same texture - unfortunately assigns texture to nails
             )
 
+def create_splash_decals(pallet_path: str, splash_textures: List[str]) -> None:
+    #Add randomised liquid splash decals to the pallet surface
+    with rep.get.prim_at_path(pallet_path):
+        rep.create.mesh_decal(
+            opacity=rep.distribution.choice(splash_textures),
+            diffuse=rep.distribution.choice(splash_textures),
+            position=rep.distribution.uniform((-0.5, 0.152, -0.35), (0.5, 0.152, 0.35)),
+            rotation=rep.distribution.uniform((0, 0, 0), (0, 360, 0)),
+            scale=rep.distribution.uniform((0.1, 0.1, 0.1), (0.4, 0.4, 0.4)),
+            offset_normal=0.001,
+        )
+
 def attach_writer(render_product: HydraTexture, output_dir: str) -> Writer:
     #Initialise BasicWriter with all required annotators and attach to render product
     writer: Writer = rep.WriterRegistry.get("BasicWriter")
