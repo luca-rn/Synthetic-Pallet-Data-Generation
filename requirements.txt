@@ -1,6 +1,7 @@
 numpy
 scipy
 open3d
+pillow
 
 # Bundled with NVIDIA Isaac Sim and not available via pip:
 # omni.replicator.core
