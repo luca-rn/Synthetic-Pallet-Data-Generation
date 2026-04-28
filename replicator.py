@@ -204,11 +204,7 @@ def randomize_texture(pallet, pallet_type: str, textures: List[str]) -> None:
                 per_sub_mesh=False, # False to ensure all wood gelements are same texture - unfortunately assigns texture to nails
             )
 
-def randomize_decal(shaders_path: str, mask_paths: str) -> None:
-    with rep.new_layer():
-
-        shader = rep.get.prim_at_path(shaders_path)
-
+def randomize_decal(shader: ReplicatorItem, mask_paths: str) -> None:
         with rep.trigger.on_frame(num_frames=100):
             with shader:
                 rep.modify.attribute(
@@ -251,14 +247,14 @@ def main() -> None:
         elev_min_deg=args.cam_elev_min,
         elev_max_deg=args.cam_elev_max,
     )
+    mask_paths = sorted(glob.glob(args.mask_dir + "liquid_mask_*.png"))
 
     with rep.new_layer():
 
         pallet = rep.get.prim_at_path(args.pallet_path)
         camera, render_product = create_camera()
         key_light, fill_light, dome_light = create_lights()
-        mask_paths = sorted(glob.glob(args.mask_dir + "liquid_mask_*.png"))
-
+        shader = rep.get.prim_at_path(args.shaders_path)
 
         with rep.trigger.on_frame(max_execs=args.num_frames, rt_subframes=4):
             randomize_camera(camera, camera_positions, args.pallet_path)
@@ -270,7 +266,7 @@ def main() -> None:
                 args.dome_int_min, args.dome_int_max,
             )
             randomize_texture(pallet, pal_type, args.textures)
-            if args.gen_liquid : randomize_decal(args.shaders_path,mask_paths)
+            if args.gen_liquid : randomize_decal(shader,mask_paths)
 
         attach_writer(render_product, args.output_dir)
 
