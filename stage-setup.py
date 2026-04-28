@@ -15,22 +15,33 @@ Headless usage:
  
 import argparse
 import sys
+import glob
 import omni.usd
 import omni.kit.app
 import omni.replicator.core as rep
-from pxr import UsdGeom, Usd
+from pxr import UsdGeom, UsdShade, Usd, Sdf
  
 DEFAULTS = {
-    "usd_path":    "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/usd_files/warehousepal.usd",
+    "usd_path":    "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/usd_files/water_nlp",
     "pallet_path": "/scene/Meshes",
+    "mask_dir": "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/liquid_generation/masks/",
 }
+
+DECAL_PATH: str = "/scene/Meshes/NLP___Oliviers_Model/LiquidDecal"
+MTL_PATH: str = "/scene/Meshes/NLP___Oliviers_Model/Looks/LiquidDecalMat"
+PALLET_X    = 0.5999   # half-width of pallet top surface
+PALLET_Y    = 0.3999   # half-depth of pallet top surface
+DECAL_Y     = 0.152    # just above pallet top
+
  
 def parse_args() -> argparse.Namespace:
     #Parse CLI arguments, falling back to defaults if not provided
     parser = argparse.ArgumentParser(description="Pallet SDG Stage Setup")
     parser.add_argument("--usd-path",    type=str, default=DEFAULTS["usd_path"])
     parser.add_argument("--pallet-path", type=str, default=DEFAULTS["pallet_path"])
-    # parse_known_args ignores Isaac Sim's own args so we don't get errors in GUI mode
+    parser.add_argument("--gen-liquid", type=bool, default=False)
+    parser.add_argument("--mask-dir", type=str, default=DEFAULTS["mask_dir"])
+    # parse_known_args ignores Isaac Sim's own args so no errors in GUI mode
     args, _ = parser.parse_known_args(sys.argv[1:])
     return args
  
@@ -65,6 +76,17 @@ def apply_semantic_label(stage: Usd.Stage, pallet_path: str) -> None:
         return
     rep.utils._set_semantics_legacy(meshes, [("class", "pallet")])
     print(f"[Setup] Semantic label 'pallet' applied to {pallet_path}")
+
+def liquid_decal(stage: Usd.Stage, mask_dir: str) -> list:
+    mask_paths = sorted(glob.glob(mask_dir + "liquid_mask_*.png"))
+    if not mask_paths:
+        mask_paths = [mask_dir + "liquid_opacity_only.png"]
+    print(f"[Setup] Found {len(mask_paths)} liquid mask(s)")
+
+    shader = UsdShade.Shader(stage.GetPrimAtPath(f"{MTL_PATH}/Shader"))
+    shader.GetInput("opacity_texture").Set(Sdf.AssetPath(mask_paths[0]))
+    print(f"[Setup] Decal texture set to: {mask_paths[0]}")
+    return mask_paths
  
 def save_stage(usd_path: str) -> None:
     #Save the current stage
@@ -77,6 +99,7 @@ def main() -> None:
     stage: Usd.Stage = open_stage(args.usd_path)
     verify_scale(stage)
     apply_semantic_label(stage, args.pallet_path)
+    if args.gen_liquid : mask_paths = liquid_decal(stage, args.mask_dir)
     save_stage(args.usd_path)
  
     print("[Setup] Done — ready to run replicator_script_1.py")
