@@ -17,6 +17,7 @@ import math
 import random
 import sys
 import asyncio
+import glob
 from typing import List, Tuple
 
 import omni.replicator.core as rep
@@ -39,6 +40,10 @@ DEFAULTS = {
        # "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/textures/Texturelabs_Wood_267L.jpg",
         "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/textures/Texturelabs_Wood_268L.jpg"],
 
+    # Liquid Decals
+    "mask_dir" : "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/liquid_generation/masks/",
+    "shader_path" : "/scene/Meshes/NLP___Oliviers_Model/Looks/LiquidDecalMat/Shader",
+
     "num_frames":   10, # Set low to avoid accidental large runs
     # How close to pallet
     "cam_dist_min": 1.3,
@@ -54,8 +59,6 @@ DEFAULTS = {
     "dome_int_min": 300.0,
     "dome_int_max": 800.0,
 }
-
-splash_path = "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/liquid_generation/liquid_mask.png"
 
 ACCEPTED_PALLET_TYPES: List[str] = ["epal","nlp"]
 
@@ -74,6 +77,7 @@ def parse_args() -> argparse.Namespace:
     """Parse CLI arguments, falling back to defaults if not provided."""
     parser = argparse.ArgumentParser(description="Pallet SDG Replicator")
     parser.add_argument("--pallet-type", type=str, default="epal")
+    parser.add_argument("--gen-liquid", type=bool, default=False)
     parser.add_argument("--pallet-path",  type=str,   default=DEFAULTS["pallet_path"])
     parser.add_argument("--output-dir",   type=str,   default=DEFAULTS["output_dir"])
     parser.add_argument("--num-frames",   type=int,   default=DEFAULTS["num_frames"])
@@ -160,38 +164,6 @@ def create_lights() -> Tuple:
     dome_light = rep.create.light(light_type="Dome", intensity=300, name="DomeLight")
     return key_light, fill_light, dome_light
 
-"""
-def create_splash_decals(pallet_path: str, splash_textures: List[str]) -> None:
-    #Add randomised liquid splash decals to the pallet surface
-    with rep.get.prim_at_path(pallet_path):
-        rep.create.mesh_decal(
-            opacity=rep.distribution.choice(splash_textures),
-            diffuse=rep.distribution.choice(splash_textures),
-            position=rep.distribution.uniform((-0.5, 0.152, -0.35), (0.5, 0.152, 0.35)),
-            rotation=rep.distribution.uniform((0, 0, 0), (0, 360, 0)),
-            scale=rep.distribution.uniform((0.1, 0.1, 0.1), (0.4, 0.4, 0.4)),
-            offset_normal=0.001,
-        )
-"""
-def create_liquid_plane() -> ReplicatorItem:
-    # plane above pallet
-    return rep.create.plane(
-        position=(0, 0.150, 0),   # just above pallet surface (nlp size)
-        rotation=(0, 0, 0),
-        # scale=(0.5, 1, 0.5),      # adjust to pallet size
-        semantics=[("class", "liquid_spill")]
-    )
-
-def create_liquid_texture(splash_texture: str) -> ReplicatorItem:
-     # Apply liquid mask texture via a material
-    return rep.create.material_omnipbr(
-        diffuse_texture=splash_texture,
-        opacity_texture=splash_texture,
-        opacity_threshold=0.1,
-        roughness=0.05,           # wet look is shiny
-        specular=1.0
-    )
-
 def randomize_camera(
         camera,camera_positions: List[Tuple[float, float, float]], pallet_path: str) -> None:
     #Randomize camera position each frame, always looking at the pallet
@@ -232,15 +204,17 @@ def randomize_texture(pallet, pallet_type: str, textures: List[str]) -> None:
                 per_sub_mesh=False, # False to ensure all wood gelements are same texture - unfortunately assigns texture to nails
             )
 
-def randomize_decal(liquid_decal: ReplicatorItem, liquid_mat: ReplicatorItem) -> None:
-    # Apply a liquid mask to a decal plane just above the pallet (NLP only)
-    with liquid_decal:
-        rep.modify.pose(
-            position = rep.distribution.uniform((-0.4, 0.150, -0.4), (0.4, 0.150, 0.4)),
-            rotation=rep.distribution.uniform((0, 0, 0), (0, 360, 0)),
-            scale=rep.distribution.uniform(0.2, 0.8)
-        )
-        rep.modify.material(liquid_mat)
+def randomize_decal(shaders_path: str, mask_paths: str) -> None:
+    with rep.new_layer():
+
+        shader = rep.get.prim_at_path(shaders_path)
+
+        with rep.trigger.on_frame(num_frames=100):
+            with shader:
+                rep.modify.attribute(
+                    "inputs:opacity_texture",
+                    rep.distribution.choice(mask_paths)
+                )
 
 def attach_writer(render_product: HydraTexture, output_dir: str) -> Writer:
     #Initialise BasicWriter with all required annotators and attach to render product
@@ -283,8 +257,7 @@ def main() -> None:
         pallet = rep.get.prim_at_path(args.pallet_path)
         camera, render_product = create_camera()
         key_light, fill_light, dome_light = create_lights()
-        liquid_decal = create_liquid_plane()
-        liquid_mat = create_liquid_texture(splash_path)
+        mask_paths = sorted(glob.glob(args.mask_dir + "liquid_mask_*.png"))
 
 
         with rep.trigger.on_frame(max_execs=args.num_frames, rt_subframes=4):
@@ -297,7 +270,7 @@ def main() -> None:
                 args.dome_int_min, args.dome_int_max,
             )
             randomize_texture(pallet, pal_type, args.textures)
-            if pal_type == "nlp": randomize_decal(liquid_decal,liquid_mat)
+            if args.gen_liquid : randomize_decal(args.shaders_path,mask_paths)
 
         attach_writer(render_product, args.output_dir)
 
