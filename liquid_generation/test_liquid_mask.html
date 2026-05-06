@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Liquid mask — parameter tester</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; font-size: 14px; background: #1a1a1a; color: #e0e0e0; display: flex; gap: 0; min-height: 100vh; }
+
+  /* sidebar */
+  #sidebar { width: 280px; min-width: 280px; background: #111; padding: 20px 16px; display: flex; flex-direction: column; gap: 20px; overflow-y: auto; }
+  h1 { font-size: 15px; font-weight: 600; color: #fff; letter-spacing: 0.02em; }
+  .section-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: #666; margin-bottom: 8px; }
+
+  .ctrl { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+  .ctrl-row { display: flex; justify-content: space-between; align-items: center; }
+  .ctrl label { font-size: 13px; color: #bbb; }
+  .ctrl .val { font-size: 13px; font-weight: 500; color: #fff; min-width: 40px; text-align: right; font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 100%; accent-color: #4a9fd8; height: 4px; cursor: pointer; }
+
+  .swatch-grid { display: flex; gap: 8px; flex-wrap: wrap; }
+  .swatch { width: 28px; height: 28px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; transition: border-color 0.1s; }
+  .swatch.active { border-color: #fff; }
+
+  .btn { width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #333; background: #222; color: #e0e0e0; cursor: pointer; font-size: 13px; transition: background 0.1s; }
+  .btn:hover { background: #2a2a2a; }
+  .btn.primary { background: #1a4a6a; border-color: #2a6a9a; color: #fff; }
+  .btn.primary:hover { background: #1e5a7e; }
+
+  /* score panel */
+  #score-panel { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 8px; padding: 12px; }
+  .score-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+  .score-item { background: #111; border-radius: 6px; padding: 8px 10px; }
+  .score-item .s-label { font-size: 11px; color: #666; margin-bottom: 2px; }
+  .score-item .s-val { font-size: 18px; font-weight: 600; }
+  .score-item .s-note { font-size: 11px; color: #666; margin-top: 2px; }
+  .good { color: #4caf7d; }
+  .warn { color: #e8a838; }
+  .bad  { color: #e05555; }
+
+  #overall { margin-top: 10px; padding: 10px 12px; border-radius: 6px; font-size: 13px; font-weight: 500; text-align: center; }
+  #overall.good { background: #1a3a2a; color: #4caf7d; }
+  #overall.warn { background: #3a2a10; color: #e8a838; }
+  #overall.bad  { background: #3a1a1a; color: #e05555; }
+
+  /* params display */
+  #params-out { background: #0a0a0a; border: 1px solid #222; border-radius: 6px; padding: 10px; font-family: monospace; font-size: 12px; color: #7ec8e3; white-space: pre; line-height: 1.6; }
+
+  /* canvas area */
+  #main { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding: 24px; gap: 16px; overflow: auto; }
+
+  .canvas-wrap {
+    background-image:
+      linear-gradient(45deg, #2a2a2a 25%, transparent 25%),
+      linear-gradient(-45deg, #2a2a2a 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #2a2a2a 75%),
+      linear-gradient(-45deg, transparent 75%, #2a2a2a 75%);
+    background-size: 20px 20px;
+    background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+    background-color: #1a1a1a;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid #333;
+  }
+  canvas { display: block; }
+
+  #render-info { font-size: 12px; color: #555; }
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+  <div>
+    <h1>Liquid mask tester</h1>
+  </div>
+
+  <div>
+    <div class="section-label">Noise shape</div>
+    <div class="ctrl">
+      <div class="ctrl-row"><label>Scale</label><span class="val" id="scale-v">3.5</span></div>
+      <input type="range" id="scale" min="1" max="8" step="0.5" value="3.5">
+    </div>
+    <div class="ctrl">
+      <div class="ctrl-row"><label>Octaves</label><span class="val" id="oct-v">6</span></div>
+      <input type="range" id="oct" min="1" max="8" step="1" value="6">
+    </div>
+    <div class="ctrl">
+      <div class="ctrl-row"><label>Persistence</label><span class="val" id="pers-v">52</span></div>
+      <input type="range" id="pers" min="10" max="90" step="1" value="52">
+    </div>
+    <div class="ctrl">
+      <div class="ctrl-row"><label>Warp strength</label><span class="val" id="warp-v">1.2</span></div>
+      <input type="range" id="warp" min="0" max="3" step="0.1" value="1.2">
+    </div>
+  </div>
+
+  <div>
+    <div class="section-label">Liquid mask</div>
+    <div class="ctrl">
+      <div class="ctrl-row"><label>Threshold</label><span class="val" id="thresh-v">42</span></div>
+      <input type="range" id="thresh" min="5" max="85" step="1" value="42">
+    </div>
+    <div class="ctrl">
+      <div class="ctrl-row"><label>Edge softness</label><span class="val" id="soft-v">8</span></div>
+      <input type="range" id="soft" min="0" max="30" step="1" value="8">
+    </div>
+  </div>
+
+  <div>
+    <div class="section-label">Colour</div>
+    <div class="swatch-grid" id="swatches">
+      <div class="swatch active" style="background:#1a3a5c" data-col="0"></div>
+      <div class="swatch" style="background:#0d0d0d" data-col="1"></div>
+      <div class="swatch" style="background:#1a4a2a" data-col="2"></div>
+      <div class="swatch" style="background:#4a1a1a" data-col="3"></div>
+      <div class="swatch" style="background:#3a2a0a" data-col="4"></div>
+    </div>
+  </div>
+
+  <div id="score-panel">
+    <div class="section-label">Realism score</div>
+    <div class="score-grid">
+      <div class="score-item">
+        <div class="s-label">Coverage</div>
+        <div class="s-val" id="sc-cov">—</div>
+        <div class="s-note" id="sc-cov-n">—</div>
+      </div>
+      <div class="score-item">
+        <div class="s-label">Connectivity</div>
+        <div class="s-val" id="sc-conn">—</div>
+        <div class="s-note" id="sc-conn-n">—</div>
+      </div>
+      <div class="score-item">
+        <div class="s-label">Edge roughness</div>
+        <div class="s-val" id="sc-edge">—</div>
+        <div class="s-note" id="sc-edge-n">—</div>
+      </div>
+      <div class="score-item">
+        <div class="s-label">Detail freq</div>
+        <div class="s-val" id="sc-freq">—</div>
+        <div class="s-note" id="sc-freq-n">—</div>
+      </div>
+    </div>
+    <div id="overall">—</div>
+  </div>
+
+  <div>
+    <div class="section-label">Parameters (copy for script)</div>
+    <pre id="params-out"></pre>
+  </div>
+
+  <button class="btn" onclick="regen()">Regenerate ↺</button>
+  <button class="btn primary" onclick="exportPNG()">Export PNG (transparent)</button>
+</div>
+
+<div id="main">
+  <div class="canvas-wrap">
+    <canvas id="c" width="512" height="512"></canvas>
+  </div>
+  <div id="render-info"></div>
+</div>
+
+<script>
+const C = document.getElementById('c');
+const ctx = C.getContext('2d');
+const W = 512, H = 512;
+
+const colors = [[26,58,92],[13,13,13],[26,74,42],[74,26,26],[58,42,10]];
+let colIdx = 0;
+
+document.getElementById('swatches').addEventListener('click', e => {
+  const sw = e.target.closest('.swatch');
+  if (!sw) return;
+  colIdx = parseInt(sw.dataset.col);
+  document.querySelectorAll('.swatch').forEach((s,j) => s.classList.toggle('active', j===colIdx));
+  draw();
+});
+
+let state = newState();
+function newState() {
+  return { ox: Math.random()*10000, oy: Math.random()*10000, perm: buildPerm(Math.random()), warpSeed: Math.random() };
+}
+function regen() { state = newState(); draw(); }
+
+function fade(t) { return t*t*t*(t*(t*6-15)+10); }
+function lerp(a,b,t) { return a+t*(b-a); }
+function grad2(h,x,y) { h&=3; return ((h<2)?((h&1)?-x:x):((h&1)?-y:y))+((h<2)?((h&2)?-y:y):((h&2)?-x:x)); }
+
+function buildPerm(seed) {
+  const p = Array.from({length:256},(_,i)=>i);
+  let s = (seed * 2147483647) >>> 0;
+  for (let i=255;i>0;i--) { s = Math.imul(s,1664525)+1013904223>>>0; const j=s%(i+1); [p[i],p[j]]=[p[j],p[i]]; }
+  const perm = new Uint8Array(512);
+  for (let i=0;i<512;i++) perm[i]=p[i&255];
+  return perm;
+}
+
+function perlin(x,y,perm) {
+  const X=Math.floor(x)&255, Y=Math.floor(y)&255;
+  const xf=x-Math.floor(x), yf=y-Math.floor(y);
+  const u=fade(xf), v=fade(yf);
+  const aa=perm[perm[X]+Y], ab=perm[perm[X]+Y+1], ba=perm[perm[X+1]+Y], bb=perm[perm[X+1]+Y+1];
+  return lerp(lerp(grad2(aa,xf,yf),grad2(ba,xf-1,yf),u),lerp(grad2(ab,xf,yf-1),grad2(bb,xf-1,yf-1),u),v);
+}
+
+function fbm(x,y,octs,pers,perm) {
+  let v=0,amp=1,freq=1,max=0;
+  for(let i=0;i<octs;i++){v+=perlin(x*freq,y*freq,perm)*amp;max+=amp;amp*=pers;freq*=2;}
+  return v/max;
+}
+
+let lastImg = null;
+
+function draw() {
+  const scale  = parseFloat(document.getElementById('scale').value);
+  const oct    = parseInt(document.getElementById('oct').value);
+  const pers   = parseFloat(document.getElementById('pers').value)/100;
+  const thresh = parseFloat(document.getElementById('thresh').value)/100;
+  const soft   = parseFloat(document.getElementById('soft').value)/100;
+  const warpStr= parseFloat(document.getElementById('warp').value);
+
+  const {ox, oy, perm, warpSeed} = state;
+  const warpPerm = buildPerm(warpSeed);
+  const [r,g,b] = colors[colIdx];
+  const t0 = performance.now();
+
+  const img = ctx.createImageData(W,H);
+  const d = img.data;
+  let liquidCount = 0;
+  let edgeCount = 0;
+
+  for(let y=0;y<H;y++){
+    for(let x=0;x<W;x++){
+      const nx = ox+(x/W)*scale, ny = oy+(y/H)*scale;
+      const wx = fbm(nx+1.7,ny+9.2,Math.min(oct,4),pers,warpPerm)*warpStr;
+      const wy = fbm(nx+8.3,ny+2.8,Math.min(oct,4),pers,warpPerm)*warpStr;
+      const n01 = (fbm(nx+wx,ny+wy,oct,pers,perm)+1)*0.5;
+      const lo=thresh-soft*0.5, hi=thresh+soft*0.5;
+      let alpha;
+      if(n01<=lo){alpha=255;liquidCount++;}
+      else if(n01>=hi){alpha=0;}
+      else{alpha=Math.round(255*(1-(n01-lo)/(hi-lo)));edgeCount++;}
+      const i=(y*W+x)*4;
+      d[i]=r;d[i+1]=g;d[i+2]=b;d[i+3]=alpha;
+    }
+  }
+
+  ctx.putImageData(img,0,0);
+  lastImg = img;
+  const ms = (performance.now()-t0).toFixed(0);
+  document.getElementById('render-info').textContent = `${W}×${H} · rendered in ${ms}ms`;
+
+  const coverage = liquidCount/(W*H);
+  const edgeRatio = edgeCount/(W*H);
+  score(coverage, edgeRatio, oct, pers, scale, thresh, soft, warpStr);
+  updateParams(scale, oct, pers, thresh, soft, warpStr);
+}
+
+function score(cov, edgeR, oct, pers, scale, thresh, soft, warp) {
+  // Coverage: real splashes cover 15–60% of frame
+  const covPct = Math.round(cov*100);
+  let covClass, covNote;
+  if(cov<0.05){covClass='bad';covNote='too sparse';}
+  else if(cov<0.15){covClass='warn';covNote='small splash';}
+  else if(cov<=0.60){covClass='good';covNote='realistic';}
+  else if(cov<=0.75){covClass='warn';covNote='large flood';}
+  else{covClass='bad';covNote='too flooded';}
+  setScore('cov',covPct+'%',covNote,covClass);
+
+  // Connectivity: edge pixels relative to liquid — too low = blob, too high = fractal dust
+  const conn = edgeR / Math.max(cov,0.001);
+  const connPct = Math.round(conn*100);
+  let connClass, connNote;
+  if(conn<0.05){connClass='bad';connNote='blobby';}
+  else if(conn<0.12){connClass='warn';connNote='smooth';}
+  else if(conn<=0.40){connClass='good';connNote='organic';}
+  else if(conn<=0.60){connClass='warn';connNote='stringy';}
+  else{connClass='bad';connNote='too fragmented';}
+  setScore('conn',connPct+'%',connNote,connClass);
+
+  // Edge roughness: driven by octaves + persistence
+  const roughScore = Math.min(oct/8,1)*0.5 + Math.min(pers/0.9,1)*0.5;
+  const roughPct = Math.round(roughScore*100);
+  let roughClass, roughNote;
+  if(roughPct<30){roughClass='bad';roughNote='too smooth';}
+  else if(roughPct<45){roughClass='warn';roughNote='glassy';}
+  else if(roughPct<=80){roughClass='good';roughNote='realistic';}
+  else{roughClass='warn';roughNote='overdetailed';}
+  setScore('edge',roughPct+'%',roughNote,roughClass);
+
+  // Detail frequency: scale should be 2–6 for a natural puddle
+  let freqClass, freqNote;
+  if(scale<1.5){freqClass='bad';freqNote='too zoomed';}
+  else if(scale<2.5){freqClass='warn';freqNote='low detail';}
+  else if(scale<=5.5){freqClass='good';freqNote='natural';}
+  else if(scale<=7){freqClass='warn';freqNote='fine grain';}
+  else{freqClass='bad';freqNote='too fine';}
+  setScore('freq', scale.toFixed(1), freqNote, freqClass);
+
+  // Overall
+  const scores = [covClass, connClass, roughClass, freqClass];
+  const bads = scores.filter(s=>s==='bad').length;
+  const warns = scores.filter(s=>s==='warn').length;
+  const el = document.getElementById('overall');
+  if(bads>=2){el.textContent='Not realistic — check highlighted metrics';el.className='bad';}
+  else if(bads===1||warns>=2){el.textContent='Somewhat realistic — some adjustments needed';el.className='warn';}
+  else{el.textContent='Looks like a realistic liquid splash!';el.className='good';}
+}
+
+function setScore(key, val, note, cls) {
+  document.getElementById('sc-'+key).textContent = val;
+  document.getElementById('sc-'+key).className = 's-val '+cls;
+  document.getElementById('sc-'+key+'-n').textContent = note;
+}
+
+function updateParams(scale, oct, pers, thresh, soft, warp) {
+  document.getElementById('params-out').textContent =
+`scale       = ${scale}
+octaves     = ${oct}
+persistence = ${pers}
+threshold   = ${thresh}
+edge_soft   = ${soft}
+warp        = ${warp}`;
+}
+
+function exportPNG() {
+  const a = document.createElement('a');
+  a.download = 'liquid-mask.png';
+  a.href = C.toDataURL('image/png');
+  a.click();
+}
+
+['scale','oct','pers','thresh','soft','warp'].forEach(id=>{
+  document.getElementById(id).addEventListener('input',function(){
+    document.getElementById(id+'-v').textContent=this.value;
+    draw();
+  });
+});
+
+draw();
+</script>
+</body>
+</html>
