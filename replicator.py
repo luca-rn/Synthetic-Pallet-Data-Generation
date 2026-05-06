@@ -23,7 +23,6 @@ from typing import List, Tuple
 import omni.replicator.core as rep
 from omni.replicator.core import Writer
 from omni.replicator.core.scripts.utils.viewport_manager import HydraTexture
-from omni.replicator.core import ReplicatorItem
 
 
 print("Running replicator script...")
@@ -44,7 +43,7 @@ DEFAULTS = {
     "mask_dir" : "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/liquid_generation/masks/",
     "shader_path" : "/scene/Meshes/NLP___Oliviers_Model/Looks/LiquidDecalMat/Shader",
 
-    "num_frames":   10, # Set low to avoid accidental large runs
+    "num_frames":   1, # Set low to avoid accidental large runs
     # How close to pallet
     "cam_dist_min": 1.3,
     "cam_dist_max": 2.3,
@@ -76,9 +75,11 @@ PALLET_ROTATIONS: List[Tuple[int, int, int]]  = [(0,0,0), (0,90,0), (0,180,0), (
 def parse_args() -> argparse.Namespace:
     """Parse CLI arguments, falling back to defaults if not provided."""
     parser = argparse.ArgumentParser(description="Pallet SDG Replicator")
-    parser.add_argument("--pallet-type", type=str, default="epal")
-    parser.add_argument("--gen-liquid", type=bool, default=False)
+    parser.add_argument("--pallet-type",  type=str, default="epal")
+    parser.add_argument("--gen-liquid",   type=bool, default=False)
     parser.add_argument("--pallet-path",  type=str,   default=DEFAULTS["pallet_path"])
+    parser.add_argument("--mask-dir",     type=str, default=DEFAULTS["mask_dir"])
+    parser.add_argument("--shader-path",  type=str,   default=DEFAULTS["shader_path"])
     parser.add_argument("--output-dir",   type=str,   default=DEFAULTS["output_dir"])
     parser.add_argument("--num-frames",   type=int,   default=DEFAULTS["num_frames"])
     parser.add_argument("--cam-dist-min", type=float, default=DEFAULTS["cam_dist_min"])
@@ -91,7 +92,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--fill-int-max", type=float, default=DEFAULTS["fill_int_max"])
     parser.add_argument("--dome-int-min", type=float, default=DEFAULTS["dome_int_min"])
     parser.add_argument("--dome-int-max", type=float, default=DEFAULTS["dome_int_max"])
-    parser.add_argument("--textures", type=List[str], default=DEFAULTS["textures"])
+    parser.add_argument("--textures",     type=List[str], default=DEFAULTS["textures"])
     args, _ = parser.parse_known_args(sys.argv[1:])
     return args
 
@@ -193,24 +194,22 @@ def randomize_lights(
     with dome_light:
         rep.modify.attribute("inputs:intensity", rep.distribution.uniform(dome_int_min, dome_int_max))
 
-def randomize_texture(pallet, pallet_type: str, textures: List[str]) -> None:
+def randomize_texture(pallet, textures: List[str]) -> None:
     #Randomize base colour texture on materials each frame
     # Just wood at the moment
     texture = rep.distribution.choice(textures)
-    if pallet_type == "epal":
-        with rep.get.prims(semantics=[("class", "pallet")]):
-            rep.randomizer.texture(
-                textures=texture,
-                per_sub_mesh=False, # False to ensure all wood gelements are same texture - unfortunately assigns texture to nails
-            )
+    with rep.get.prims(semantics=[("class", "pallet")]):
+        rep.randomizer.texture(
+            textures=texture,
+            per_sub_mesh=False, # False to ensure all wood gelements are same texture - unfortunately assigns texture to nails
+        )
 
-def randomize_decal(shader: ReplicatorItem, mask_paths: str) -> None:
-        with rep.trigger.on_frame(num_frames=100):
-            with shader:
-                rep.modify.attribute(
-                    "inputs:opacity_texture",
-                    rep.distribution.choice(mask_paths)
-                )
+def randomize_decal(shader, mask_paths: str) -> None:
+    with shader:
+        rep.modify.attribute(
+            "inputs:opacity_texture",
+            rep.distribution.choice(mask_paths)
+        )
 
 def attach_writer(render_product: HydraTexture, output_dir: str) -> Writer:
     #Initialise BasicWriter with all required annotators and attach to render product
@@ -254,7 +253,7 @@ def main() -> None:
         pallet = rep.get.prim_at_path(args.pallet_path)
         camera, render_product = create_camera()
         key_light, fill_light, dome_light = create_lights()
-        shader = rep.get.prim_at_path(args.shaders_path)
+        shader = rep.get.prim_at_path(args.shader_path)
 
         with rep.trigger.on_frame(max_execs=args.num_frames, rt_subframes=4):
             randomize_camera(camera, camera_positions, args.pallet_path)
@@ -265,7 +264,7 @@ def main() -> None:
                 args.fill_int_min, args.fill_int_max,
                 args.dome_int_min, args.dome_int_max,
             )
-            randomize_texture(pallet, pal_type, args.textures)
+            if pal_type == "epal": randomize_texture(pallet, args.textures)
             if args.gen_liquid : randomize_decal(shader,mask_paths)
 
         attach_writer(render_product, args.output_dir)
