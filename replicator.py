@@ -76,7 +76,7 @@ def parse_args() -> argparse.Namespace:
     """Parse CLI arguments, falling back to defaults if not provided."""
     parser = argparse.ArgumentParser(description="Pallet SDG Replicator")
     parser.add_argument("--pallet-type",  type=str, default="epal")
-    parser.add_argument("--gen-liquid",   type=bool, default=False)
+    parser.add_argument("--gen-liquid", action="store_true", default=False)
     parser.add_argument("--pallet-path",  type=str,   default=DEFAULTS["pallet_path"])
     parser.add_argument("--mask-dir",     type=str, default=DEFAULTS["mask_dir"])
     parser.add_argument("--shader-path",  type=str,   default=DEFAULTS["shader_path"])
@@ -140,6 +140,13 @@ def sample_camera_positions(
         positions.append((x, y, z))
 
     return positions
+
+def establish_masks(mask_dir) -> List[str]:
+    mask_paths = sorted(glob.glob(mask_dir + "liquid_mask_*.png"))
+    if not mask_paths:
+        sys.exit(f"Error: --gen-liquid requested but no liquid_mask_*.png files found in {mask_dir}"
+    )
+    return mask_paths
 
 def create_camera() -> HydraTexture:
     # Create the SDG camera and render product matching given intrinsics
@@ -246,7 +253,7 @@ def main() -> None:
         elev_min_deg=args.cam_elev_min,
         elev_max_deg=args.cam_elev_max,
     )
-    mask_paths = sorted(glob.glob(args.mask_dir + "liquid_mask_*.png"))
+    if args.gen_liquid: mask_paths: List[str] = establish_masks(args.mask_dir)
 
     with rep.new_layer():
 
