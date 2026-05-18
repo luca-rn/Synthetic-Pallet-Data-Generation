@@ -12,9 +12,10 @@ Headless usage:
         --cam-dist-max 2.3
         --textures "/path/to/textures/*"
 """
-import argparse, math, random, sys
+import argparse, math, random, sys, os
 import asyncio, carb, glob
 from typing import List, Tuple
+import datetime
 
 import omni.hydra.engine.stats as hstats
 import omni.kit.app
@@ -29,12 +30,12 @@ print("Running replicator script...")
 
 DEFAULTS = {
     "pallet_path":  "/scene/Meshes", # Path to the pallet within Isaac Sim - Set up by stage-setup.py
-    "output_dir":   "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/SDG_output",
+    "output_dir":   "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/luca_data/SDG_data_wetpal_raytrace",
     # Liquid Decals
     "mask_dir" : "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/liquid_generation/masks/",
     "shader_path" : "/scene/Meshes/NLP___Oliviers_Model/Looks/LiquidDecalMat/Shader",
 
-    "num_frames":   3, # Set low to avoid accidental large runs
+    "num_frames":   50, # Set low to avoid accidental large runs
     # How close to pallet
     "cam_dist_min": 1.3,
     "cam_dist_max": 2.3,
@@ -50,8 +51,7 @@ DEFAULTS = {
     "dome_int_max": 800.0,
 }
 
-USE_PATH_TRACING = True  # false for real-time, true for pathtracing
-# pathtracing gives better visualisation but much lower fps
+USE_PATH_TRACING = False  # false for real-time
 SPP = 32
 TOTAL_SPP = 64
 
@@ -245,16 +245,16 @@ def attach_writer(render_product: HydraTexture, output_dir: str) -> Writer:
     writer.initialize(
         output_dir=output_dir,
         rgb=True,
-        bounding_box_2d_tight=True,
-        bounding_box_2d_loose=True,
-        bounding_box_3d=True,
-        instance_segmentation=True,
-        semantic_segmentation=True,
-        distance_to_camera=True,
+        bounding_box_2d_tight=False,
+        bounding_box_2d_loose=False,
+        bounding_box_3d=False,
+        instance_segmentation=False,
+        semantic_segmentation=False,
+        distance_to_camera=False,
         #pointcloud=True,
         #pointcloud_include_unlabelled=False,
-        normals=True,
-        camera_params=True,
+        normals=False,
+        camera_params=False,
     )
     writer.attach([render_product])
     return writer
@@ -268,14 +268,38 @@ def get_frame_stats():
         return fps, frame_ms
     return None, None
     
-async def run_replicator(num_frames: int, output_dir: str) -> None:
+def write_run_summary(output_dir, num_frames, pal_type, gen_liquid):
+    h = omni.hydra.engine.stats.HydraEngineStats()
+    result = h.get_gpu_profiler_result()
+    frame_ms = result[0][0]["duration"] if result and result[0] else None
+    fps = (1000.0 / frame_ms) if frame_ms else None
+    render_mode = carb.settings.get_settings().get("/rtx/rendermode")
+
+    os.makedirs(output_dir, exist_ok=True)
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    summary_path = os.path.join(output_dir, f"run_summary_{timestamp}.txt")
+
+    lines = [
+        "=== SDG Run Summary ===",
+        f"Timestamp:       {timestamp}",
+        f"Pallet type:     {pal_type}",
+        f"Contaminant decal:    {gen_liquid}",
+        f"Num frames:      {num_frames}",
+        f"Render mode:     {render_mode}",
+        f"GPU frame time:  {frame_ms:.2f} ms" if frame_ms else "GPU frame time:  N/A",
+        f"FPS:             {fps:.1f}" if fps else "FPS:             N/A",
+    ]
+
+    with open(summary_path, "w") as f:
+        f.write("\n".join(lines) + "\n")
+
+    print(f"[Summary] Written to {summary_path}")
+
+    
+async def run_replicator(num_frames: int, output_dir: str, pal_type:str, gen_liquid: bool) -> None:
     await rep.orchestrator.run_async(num_frames=num_frames+1)#+1 for silently consumed frame in startup 
     await rep.orchestrator.wait_until_complete_async()
-    
-    fps, frame_ms = get_frame_stats()
-    if fps:
-        print(f"[Replicator] Done. {num_frames} frames written to {output_dir}")
-        print(f"[Perf] GPU frame time: {frame_ms:.2f} ms  |  FPS: {fps:.1f}")
+    write_run_summary(output_dir, num_frames, pal_type, gen_liquid)
 
 def main() -> None:
     args = parse_args()
@@ -316,7 +340,7 @@ def main() -> None:
 
         attach_writer(render_product, args.output_dir)
 
-    asyncio.ensure_future(run_replicator(args.num_frames, args.output_dir)) 
+    asyncio.ensure_future(run_replicator(args.num_frames, args.output_dir, pal_type, gen_liquid)) 
 
 if __name__ == "__main__":
     main()
