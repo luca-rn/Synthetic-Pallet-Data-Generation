@@ -17,6 +17,7 @@ import math
 import random
 import sys
 import asyncio
+import carb
 import glob
 from typing import List, Tuple
 
@@ -51,6 +52,10 @@ DEFAULTS = {
     "dome_int_min": 300.0,
     "dome_int_max": 800.0,
 }
+
+USE_PATH_TRACING = True  # false for real-time
+SPP = 32
+TOTAL_SPP = 64
 
 ACCEPTED_PALLET_TYPES: List[str] = ["epal","nlp"]
 
@@ -100,6 +105,19 @@ def check_pallet_type(pal_type: str) -> str:
     if not pal_type in ACCEPTED_PALLET_TYPES:
         sys.exit(f"Error: Unacceptable pallet type: {pal_type}")
     return pal_type
+
+def set_render_mode() -> int:
+    #mode: 'PathTracing' or 'RaytracedLighting'"""
+    s = carb.settings.get_settings()
+    if USE_PATH_TRACING:
+        s.set("/rtx/rendermode", "PathTracing")
+        s.set_int("/rtx/pathtracing/spp", SPP)
+        s.set_int("/rtx/pathtracing/totalSpp", TOTAL_SPP)  # MUST be > 0
+        return TOTAL_SPP//SPP
+    else:
+        s.set("/rtx/rendermode", "RaytracedLighting")
+        return 1
+
 
 # Spherical Camera Placement
 def sample_camera_positions(
@@ -243,13 +261,16 @@ def attach_writer(render_product: HydraTexture, output_dir: str) -> Writer:
     writer.attach([render_product])
     return writer
     
-async def run_replicator(num_frames: int) -> None:
+async def run_replicator(num_frames: int, output_dir: str) -> None:
     await rep.orchestrator.run_async(num_frames=num_frames)
     await rep.orchestrator.wait_until_complete_async()
+    print(f"[Replicator] Done. {num_frames} frames written to {output_dir}")
 
 def main() -> None:
     args = parse_args()
     pal_type: str = check_pallet_type(args.pallet_type)
+
+    subframes: int = set_render_mode()
 
     camera_positions: List[Tuple[float, float, float]] = sample_camera_positions(
         n=args.num_frames,
@@ -270,7 +291,7 @@ def main() -> None:
         key_light, fill_light, dome_light = create_lights()
         if gen_liquid: shader = rep.get.prim_at_path(args.shader_path)
 
-        with rep.trigger.on_frame(max_execs=args.num_frames, rt_subframes=1):
+        with rep.trigger.on_frame(max_execs=args.num_frames, rt_subframes=subframes):
             randomize_camera(camera, camera_positions, args.pallet_path)
             randomize_pallet(pallet)
             randomize_lights(
@@ -284,8 +305,7 @@ def main() -> None:
 
         attach_writer(render_product, args.output_dir)
 
-    asyncio.ensure_future(run_replicator(args.num_frames))
-    print(f"[Replicator] Done. {args.num_frames} frames written to {args.output_dir}")
+    asyncio.ensure_future(run_replicator(args.num_frames, args.output_dir))
 
 if __name__ == "__main__":
     main()
