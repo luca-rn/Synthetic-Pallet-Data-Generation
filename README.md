@@ -13,11 +13,9 @@ This pipeline renders randomised camera views of a EUR pallet (1.2 × 0.8 × 0.1
 | `stage-setup.py` | Opens the USD scene, verifies scale/axis, and attaches a `pallet` semantic label. Run once per session before the replicator. |
 | `replicator.py` | Runs the Replicator loop — randomises camera pose, pallet rotation, and lighting, then writes annotated frames to disk. |
 | `---.usd` | USD files used as the stage entry point |
-| `example_output` | Contains the output of a test run of the replicator script - with NUM_FRAMES = 10 |
-
-## IMPORTANT - files path
-Path to the usd in `stage-setup` is hardcoded.
-Output dict is for writing is hardcoded in `replicator_sript_1.py`.
+| `example_output` | Contains the output of a test run of the replicator script |
+| `pointcloud_viewer.py` | Visualises a pointcloud with open3d, requires pointcloud.npy and pointcloud_rgba.npy from replicator |
+| `ptcloud_noise.py` | Adds noise to a pointcloud. Requires pts, rgba, and depth numpy files, also output path and randomisation seed |
 
 ## Usage
 
@@ -45,6 +43,8 @@ Each frame is saved with:
 - Camera parameters
 
 ## Camera Configuration
+
+Default Values:
 
 | Parameter | Value |
 |-----------|-------|
