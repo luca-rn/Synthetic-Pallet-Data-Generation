@@ -12,15 +12,12 @@ Headless usage:
         --cam-dist-max 2.3
         --textures "/path/to/textures/*"
 """
-import argparse
-import math
-import random
-import sys
-import asyncio
-import carb
-import glob
+import argparse, math, random, sys
+import asyncio, carb, glob
 from typing import List, Tuple
 
+import omni.hydra.engine.stats as hstats
+import omni.kit.app
 import omni.replicator.core as rep
 from omni.replicator.core import Writer
 from omni.replicator.core.scripts.utils.viewport_manager import HydraTexture
@@ -37,23 +34,24 @@ DEFAULTS = {
     "mask_dir" : "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/liquid_generation/masks/",
     "shader_path" : "/scene/Meshes/NLP___Oliviers_Model/Looks/LiquidDecalMat/Shader",
 
-    "num_frames":   2, # Set low to avoid accidental large runs
+    "num_frames":   3, # Set low to avoid accidental large runs
     # How close to pallet
     "cam_dist_min": 1.3,
     "cam_dist_max": 2.3,
     # degrees above base plane
     "cam_elev_min": 15.0,
-    "cam_elev_max": 75.0,
+    "cam_elev_max": 35.0,
     # Light randomization limits
-    "key_int_min":  2000.0,
-    "key_int_max":  7000.0,
+    "key_int_min":  3000.0,
+    "key_int_max":  8000.0,
     "fill_int_min": 300.0,
     "fill_int_max": 800.0,
     "dome_int_min": 300.0,
     "dome_int_max": 800.0,
 }
 
-USE_PATH_TRACING = True  # false for real-time
+USE_PATH_TRACING = True  # false for real-time, true for pathtracing
+# pathtracing gives better visualisation but much lower fps
 SPP = 32
 TOTAL_SPP = 64
 
@@ -260,11 +258,24 @@ def attach_writer(render_product: HydraTexture, output_dir: str) -> Writer:
     )
     writer.attach([render_product])
     return writer
+
+def get_frame_stats():
+    h = hstats.HydraEngineStats()
+    result = h.get_gpu_profiler_result()
+    if result and result[0]:
+        frame_ms = result[0][0]["duration"]
+        fps = 1000.0 / frame_ms if frame_ms > 0 else 0.0
+        return fps, frame_ms
+    return None, None
     
 async def run_replicator(num_frames: int, output_dir: str) -> None:
-    await rep.orchestrator.run_async(num_frames=num_frames)
+    await rep.orchestrator.run_async(num_frames=num_frames+1)#+1 for silently consumed frame in startup 
     await rep.orchestrator.wait_until_complete_async()
-    print(f"[Replicator] Done. {num_frames} frames written to {output_dir}")
+    
+    fps, frame_ms = get_frame_stats()
+    if fps:
+        print(f"[Replicator] Done. {num_frames} frames written to {output_dir}")
+        print(f"[Perf] GPU frame time: {frame_ms:.2f} ms  |  FPS: {fps:.1f}")
 
 def main() -> None:
     args = parse_args()
@@ -273,7 +284,7 @@ def main() -> None:
     subframes: int = set_render_mode()
 
     camera_positions: List[Tuple[float, float, float]] = sample_camera_positions(
-        n=args.num_frames,
+        n=args.num_frames, 
         centre=PALLET_CENTRE[pal_type],
         dist_min=args.cam_dist_min,
         dist_max=args.cam_dist_max,
@@ -291,7 +302,7 @@ def main() -> None:
         key_light, fill_light, dome_light = create_lights()
         if gen_liquid: shader = rep.get.prim_at_path(args.shader_path)
 
-        with rep.trigger.on_frame(max_execs=args.num_frames, rt_subframes=subframes):
+        with rep.trigger.on_frame(max_execs=args.num_frames+1, rt_subframes=subframes): #+1 for silently consumed frame in startup
             randomize_camera(camera, camera_positions, args.pallet_path)
             randomize_pallet(pallet)
             randomize_lights(
@@ -305,7 +316,7 @@ def main() -> None:
 
         attach_writer(render_product, args.output_dir)
 
-    asyncio.ensure_future(run_replicator(args.num_frames, args.output_dir))
+    asyncio.ensure_future(run_replicator(args.num_frames, args.output_dir)) 
 
 if __name__ == "__main__":
     main()
