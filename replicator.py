@@ -30,12 +30,12 @@ print("Running replicator script...")
 
 DEFAULTS = {
     "pallet_path":  "/scene/Meshes", # Path to the pallet within Isaac Sim - Set up by stage-setup.py
-    "output_dir":   "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/luca_data/SDG_data_nlp_raytrace",
+    "output_dir":   "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/SDG_output",
     # Liquid Decals
     "mask_dir" : "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/liquid_generation/masks/",
     "shader_path" : "/scene/Meshes/NLP___Oliviers_Model/Looks/LiquidDecalMat/Shader",
 
-    "num_frames":   50, # Set low to avoid accidental large runs
+    "num_frames":   5, # Set low to avoid accidental large runs
     # How close to pallet
     "cam_dist_min": 1.3,
     "cam_dist_max": 2.3,
@@ -53,7 +53,7 @@ DEFAULTS = {
     # Block rotation limits (degrees, applied around Z/vertical axis)
     "block_rot_max": 15.0,
     # Number of blocks rotated (0-9)
-    "num_block_rot_prob": 1,
+    "num_block_rot": 1,
 }
 
 USE_PATH_TRACING = False  # false for real-time
@@ -62,11 +62,12 @@ TOTAL_SPP = 64
 
 ACCEPTED_PALLET_TYPES: List[str] = ["epal","nlp"]
 
-TEXTURES: List[str] = ["C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/textures/plywood_diff_4k.jpg",
+TEXTURES: List[str] = [#"C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/textures/plywood_diff_4k.jpg",
        "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/textures/Material_003_baseColor.jpg"
-        "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/textures/Texturelabs_Wood_266L.jpg",
+        #"C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/textures/Texturelabs_Wood_266L.jpg",
        # "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/textures/Texturelabs_Wood_267L.jpg",
-        "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/textures/Texturelabs_Wood_268L.jpg"]
+        #"C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/textures/Texturelabs_Wood_268L.jpg"
+        ]
 
 # Camera intrinsics - need to match to real camera later
 #RESOLUTION: Tuple[int, int]      = (2448, 2048)    # Zivid 2 M70 resolution
@@ -82,7 +83,7 @@ PALLET_ROTATIONS: List[Tuple[int, int, int]]  = [(0,0,0), (0,90,0), (0,180,0), (
 
 # Pallet_Blocks prim paths - Block_0 through Block_8
 BLOCK_PATHS: List[str] = [
-    "/World/Euro_Pallet/Meshes/Sketchfab_model/_53432bb09b84172864175516b644c7a_fbx/RootNode/Pallet_Blocks/Block_{}".format(i)
+    "/scene/Meshes/Sketchfab_model/_53432bb09b84172864175516b644c7a_fbx/RootNode/Pallet_Blocks/Block_{}".format(i)
     for i in range(9)
 ]
 
@@ -259,41 +260,19 @@ def randomize_texture(pallet, textures: List[str]) -> None:
             per_sub_mesh=False, # False to ensure all wood gelements are same texture - unfortunately assigns texture to nails
         )
 
-def randomize_blocks(block_rot_max: float, num_block_rot: int, block_paths = List[str]) -> None:
+def randomize_blocks(block_rot_max: float, num_block_rot: int, block_paths: List[str]) -> None:
     #Randomly twist individual pallet blocks around the vertical (Y) axis each frame.
- 
-    #Each block is independently toggled on/off via block_rot_prob, then given a
-    #uniformly sampled rotation in [-block_rot_max, +block_rot_max] degrees.
-    #X and Z rotations are left at 0 so blocks stay flat on the pallet surface.
- 
-    for block_path in block_paths:
+    total_blocks = 9
+    indices_to_rotate = random.sample(range(total_blocks), min(num_block_rot, total_blocks))
+
+    for i, block_path in enumerate(block_paths):
         block = rep.get.prim_at_path(block_path)
         with block:
-            # either no rotation or a random twist
-            # We include (0,0,0) weighted by (1 - prob) and a uniform twist weighted by prob.
-            # Replicator doesn't support conditional logic natively, so we sample a
-            # candidate rotation and decide per-frame using a Bernoulli-weighted choice list.
-            #
-            # Strategy: pre-build a list of candidate (x,y,z) rotations.
-            # One entry is always (0,0,0); the rest are random twists sampled at graph-build
-            # time. Replicator picks uniformly from this list each frame, so the effective
-            # twist probability ≈ (n_twisted / total). We size the list to approximate
-            # block_rot_prob as closely as possible.
-            #
-            # Example: block_rot_prob=0.3 → 3 twisted + 7 unrotated = 10 entries → 30 % chance.
- 
-            total_entries = 10
-            n_twisted = max(0, min(total_entries, num_block_rot))
-            n_still   = total_entries - n_twisted
- 
-            rotation_choices: List[Tuple[float, float, float]] = []
-            for _ in range(n_twisted):
+            if i in indices_to_rotate:
                 twist = random.uniform(-block_rot_max, block_rot_max)
-                rotation_choices.append((0.0, 0.0, twist))
-            for _ in range(n_still):
-                rotation_choices.append((0.0, 0.0, 0.0))
- 
-            rep.modify.pose(rotation=rep.distribution.choice(rotation_choices))
+                rep.modify.pose(rotation=(0.0, 0.0, twist))
+            else:
+                rep.modify.pose(rotation=(0.0, 0.0, 0.0))
 
 def randomize_decal(shader, mask_paths: str) -> None:
     with shader:
@@ -331,7 +310,7 @@ def get_frame_stats():
         return fps, frame_ms
     return None, None
     
-def write_run_summary(output_dir, num_frames, pal_type, gen_liquid):
+def write_run_summary(output_dir, num_frames, pal_type, gen_liquid, args):
     fps, frame_ms = get_frame_stats()
     render_mode = carb.settings.get_settings().get("/rtx/rendermode")
 
@@ -341,13 +320,40 @@ def write_run_summary(output_dir, num_frames, pal_type, gen_liquid):
 
     lines = [
         "=== SDG Run Summary ===",
-        f"Timestamp:       {timestamp}",
-        f"Pallet type:     {pal_type}",
-        f"Contaminant decal:    {gen_liquid}",
-        f"Num frames:      {num_frames}",
-        f"Render mode:     {render_mode}",
-        f"GPU frame time:  {frame_ms:.2f} ms" if frame_ms else "GPU frame time:  N/A",
-        f"FPS:             {fps:.1f}" if fps else "FPS:             N/A",
+        f"Timestamp:         {timestamp}",
+        f"",
+        f"--- Scene ---",
+        f"Pallet type:       {pal_type}",
+        f"Pallet path:       {args.pallet_path}",
+        f"Contaminant decal: {gen_liquid}",
+        f"",
+        f"--- Output ---",
+        f"Output dir:        {args.output_dir}",
+        f"Num frames:        {num_frames}",
+        f"Resolution:        {RESOLUTION[0]}x{RESOLUTION[1]}",
+        f"",
+        f"--- Camera ---",
+        f"Focal length:      {FOCAL_LENGTH} mm",
+        f"Horizontal apt:    {H_APERTURE} mm",
+        f"Distance range:    {args.cam_dist_min} – {args.cam_dist_max} m",
+        f"Elevation range:   {args.cam_elev_min} – {args.cam_elev_max} deg",
+        f"",
+        f"--- Lighting ---",
+        f"Key intensity:     {args.key_int_min} – {args.key_int_max}",
+        f"Fill intensity:    {args.fill_int_min} – {args.fill_int_max}",
+        f"Dome intensity:    {args.dome_int_min} – {args.dome_int_max}",
+        f"",
+        f"--- Block Rotation ---",
+        f"Enabled:           {not args.no_block_rot}",
+        f"Blocks rotated:    {args.num_block_rot} / {len(BLOCK_PATHS)}",
+        f"Max twist angle:   +/- {args.block_rot_max} deg",
+        f"",
+        f"--- Render ---",
+        f"Render mode:       {render_mode}",
+        f"Path tracing:      {USE_PATH_TRACING}",
+        f"SPP / Total SPP:   {SPP} / {TOTAL_SPP}" if USE_PATH_TRACING else f"SPP / Total SPP:   N/A (realtime)",
+        f"GPU frame time:    {frame_ms:.2f} ms" if frame_ms else f"GPU frame time:    N/A",
+        f"FPS:               {fps:.1f}" if fps else f"FPS:               N/A",
     ]
 
     with open(summary_path, "w") as f:
@@ -356,10 +362,10 @@ def write_run_summary(output_dir, num_frames, pal_type, gen_liquid):
     print(f"[Summary] Written to {summary_path}")
 
     
-async def run_replicator(num_frames: int, output_dir: str, pal_type:str, gen_liquid: bool) -> None:
+async def run_replicator(num_frames: int, output_dir: str, pal_type:str, gen_liquid: bool, args) -> None:
     await rep.orchestrator.run_async(num_frames=num_frames+1)#+1 for silently consumed frame in startup 
     await rep.orchestrator.wait_until_complete_async()
-    write_run_summary(output_dir, num_frames, pal_type, gen_liquid)
+    write_run_summary(output_dir, num_frames, pal_type, gen_liquid, args)
 
 def main() -> None:
     args = parse_args()
@@ -403,7 +409,7 @@ def main() -> None:
 
         attach_writer(render_product, args.output_dir)
 
-    asyncio.ensure_future(run_replicator(args.num_frames, args.output_dir, pal_type, gen_liquid)) 
+    asyncio.ensure_future(run_replicator(args.num_frames, args.output_dir, pal_type, gen_liquid, args)) 
 
 if __name__ == "__main__":
     main()
