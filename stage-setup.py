@@ -22,7 +22,7 @@ import omni.replicator.core as rep
 from pxr import UsdGeom, UsdShade, Usd, Sdf
  
 DEFAULTS = {
-    "usd_path":    "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/usd_files/water_nlp.usd",
+    "usd_path":    "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/usd_files/warehouse_nlp.usd",
     "pallet_path": "/scene/Meshes",
     "mask_dir": "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/liquid_generation/masks/",
 }
@@ -106,3 +106,4 @@ def main() -> None:
  
 if __name__ == "__main__":
     main()
+

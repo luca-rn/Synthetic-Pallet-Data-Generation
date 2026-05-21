@@ -30,7 +30,7 @@ print("Running replicator script...")
 
 DEFAULTS = {
     "pallet_path":  "/scene/Meshes", # Path to the pallet within Isaac Sim - Set up by stage-setup.py
-    "output_dir":   "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/luca_data/SDG_data_wetpal_raytrace",
+    "output_dir":   "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/luca_data/SDG_data_nlp_raytrace",
     # Liquid Decals
     "mask_dir" : "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/liquid_generation/masks/",
     "shader_path" : "/scene/Meshes/NLP___Oliviers_Model/Looks/LiquidDecalMat/Shader",
@@ -49,6 +49,11 @@ DEFAULTS = {
     "fill_int_max": 800.0,
     "dome_int_min": 300.0,
     "dome_int_max": 800.0,
+    
+    # Block rotation limits (degrees, applied around Z/vertical axis)
+    "block_rot_max": 15.0,
+    # Number of blocks rotated (0-9)
+    "num_block_rot_prob": 1,
 }
 
 USE_PATH_TRACING = False  # false for real-time
@@ -58,6 +63,7 @@ TOTAL_SPP = 64
 ACCEPTED_PALLET_TYPES: List[str] = ["epal","nlp"]
 
 TEXTURES: List[str] = ["C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/textures/plywood_diff_4k.jpg",
+       "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/textures/Material_003_baseColor.jpg"
         "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/textures/Texturelabs_Wood_266L.jpg",
        # "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/textures/Texturelabs_Wood_267L.jpg",
         "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/textures/Texturelabs_Wood_268L.jpg"]
@@ -74,17 +80,29 @@ PALLET_CENTRE: dict[str, Tuple[float, float, float]] = {
 }
 PALLET_ROTATIONS: List[Tuple[int, int, int]]  = [(0,0,0), (0,90,0), (0,180,0), (0,270,0)]
 
+# Pallet_Blocks prim paths - Block_0 through Block_8
+BLOCK_PATHS: List[str] = [
+    "/World/Euro_Pallet/Meshes/Sketchfab_model/_53432bb09b84172864175516b644c7a_fbx/RootNode/Pallet_Blocks/Block_{}".format(i)
+    for i in range(9)
+]
+
 def parse_args() -> argparse.Namespace:
     """Parse CLI arguments, falling back to defaults if not provided."""
     parser = argparse.ArgumentParser(description="Pallet SDG Replicator")
-    parser.add_argument("--pallet-type",  type=str, default="nlp")
-    parser.add_argument("--gen-liquid", type=int, default=1)
+    parser.add_argument("--pallet-type",  type=str, default="epal")
+    parser.add_argument("--gen-liquid", type=int, default=None)
     #parser.add_argument("--gen-liquid", action="store_true", default=False)
-    parser.add_argument("--pallet-path",  type=str,   default=DEFAULTS["pallet_path"])
-    parser.add_argument("--mask-dir",     type=str, default=DEFAULTS["mask_dir"])
-    parser.add_argument("--shader-path",  type=str,   default=DEFAULTS["shader_path"])
+    parser.add_argument("--pallet-path",  type=str,   default=DEFAULTS["pallet_path"],
+                        help="Path to the pallet within Isaac Sim (Default: /scene/Meshes)")
+    parser.add_argument("--mask-dir",     type=str, default=DEFAULTS["mask_dir"],
+                        help="Path to masks for NLP pal contaminants")
+    parser.add_argument("--shader-path",  type=str,   default=DEFAULTS["shader_path"],
+                        help="Path to shader for NLP pallet (in sim)")
     parser.add_argument("--output-dir",   type=str,   default=DEFAULTS["output_dir"])
-    parser.add_argument("--num-frames",   type=int,   default=DEFAULTS["num_frames"])
+    parser.add_argument("--num-frames",   type=int,   default=DEFAULTS["num_frames"],
+                        help="Number of frames for replicator to generate")
+    
+    #Lights and Camera Variables
     parser.add_argument("--cam-dist-min", type=float, default=DEFAULTS["cam_dist_min"])
     parser.add_argument("--cam-dist-max", type=float, default=DEFAULTS["cam_dist_max"])
     parser.add_argument("--cam-elev-min", type=float, default=DEFAULTS["cam_elev_min"])
@@ -95,7 +113,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--fill-int-max", type=float, default=DEFAULTS["fill_int_max"])
     parser.add_argument("--dome-int-min", type=float, default=DEFAULTS["dome_int_min"])
     parser.add_argument("--dome-int-max", type=float, default=DEFAULTS["dome_int_max"])
+
     parser.add_argument("--textures",     type=str)
+    # Block rotation args
+    parser.add_argument("--block-rot-max",  type=float, default=DEFAULTS["block_rot_max"],
+                        help="Max twist angle per block in degrees (default: 15)")
+    parser.add_argument("--num-block-rot", type=int, default=DEFAULTS["num_block_rot"],
+                        help="Probability each block is rotated each frame (default: 1)")
+    parser.add_argument("--no-block-rot",   action="store_true", default=False,
+                        help="Disable block rotation entirely")
+    
     args, _ = parser.parse_known_args(sys.argv[1:])
     return args
 
@@ -232,6 +259,42 @@ def randomize_texture(pallet, textures: List[str]) -> None:
             per_sub_mesh=False, # False to ensure all wood gelements are same texture - unfortunately assigns texture to nails
         )
 
+def randomize_blocks(block_rot_max: float, num_block_rot: int, block_paths = List[str]) -> None:
+    #Randomly twist individual pallet blocks around the vertical (Y) axis each frame.
+ 
+    #Each block is independently toggled on/off via block_rot_prob, then given a
+    #uniformly sampled rotation in [-block_rot_max, +block_rot_max] degrees.
+    #X and Z rotations are left at 0 so blocks stay flat on the pallet surface.
+ 
+    for block_path in block_paths:
+        block = rep.get.prim_at_path(block_path)
+        with block:
+            # either no rotation or a random twist
+            # We include (0,0,0) weighted by (1 - prob) and a uniform twist weighted by prob.
+            # Replicator doesn't support conditional logic natively, so we sample a
+            # candidate rotation and decide per-frame using a Bernoulli-weighted choice list.
+            #
+            # Strategy: pre-build a list of candidate (x,y,z) rotations.
+            # One entry is always (0,0,0); the rest are random twists sampled at graph-build
+            # time. Replicator picks uniformly from this list each frame, so the effective
+            # twist probability ≈ (n_twisted / total). We size the list to approximate
+            # block_rot_prob as closely as possible.
+            #
+            # Example: block_rot_prob=0.3 → 3 twisted + 7 unrotated = 10 entries → 30 % chance.
+ 
+            total_entries = 10
+            n_twisted = max(0, min(total_entries, num_block_rot))
+            n_still   = total_entries - n_twisted
+ 
+            rotation_choices: List[Tuple[float, float, float]] = []
+            for _ in range(n_twisted):
+                twist = random.uniform(-block_rot_max, block_rot_max)
+                rotation_choices.append((0.0, 0.0, twist))
+            for _ in range(n_still):
+                rotation_choices.append((0.0, 0.0, 0.0))
+ 
+            rep.modify.pose(rotation=rep.distribution.choice(rotation_choices))
+
 def randomize_decal(shader, mask_paths: str) -> None:
     with shader:
         rep.modify.attribute(
@@ -269,10 +332,7 @@ def get_frame_stats():
     return None, None
     
 def write_run_summary(output_dir, num_frames, pal_type, gen_liquid):
-    h = omni.hydra.engine.stats.HydraEngineStats()
-    result = h.get_gpu_profiler_result()
-    frame_ms = result[0][0]["duration"] if result and result[0] else None
-    fps = (1000.0 / frame_ms) if frame_ms else None
+    fps, frame_ms = get_frame_stats()
     render_mode = carb.settings.get_settings().get("/rtx/rendermode")
 
     os.makedirs(output_dir, exist_ok=True)
@@ -335,7 +395,10 @@ def main() -> None:
                 args.fill_int_min, args.fill_int_max,
                 args.dome_int_min, args.dome_int_max,
             )
-            if pal_type == "epal": randomize_texture(pallet, textures)
+            if pal_type == "epal":
+                randomize_texture(pallet, textures)
+                if not args.no_block_rot:
+                    randomize_blocks(args.block_rot_max, args.num_block_rot, BLOCK_PATHS)
             if gen_liquid : randomize_decal(shader,mask_paths)
 
         attach_writer(render_product, args.output_dir)
@@ -344,3 +407,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
