@@ -1,0 +1,6 @@
+example_output/
+liquid_generation/__pycache__/
+liquid_generation/liquid_mask.png
+liquid_generation/masks/
+liquid_generation/pallet_temp.usd
+liquid_generation/pallet_water_viewer.html
