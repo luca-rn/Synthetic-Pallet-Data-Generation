@@ -51,9 +51,10 @@ DEFAULTS = {
     "dome_int_max": 800.0,
     
     # Block rotation limits (degrees, applied around Z/vertical axis)
-    "block_rot_max": 15.0,
+    "block_rot_max": 90.0,
     # Number of blocks rotated (0-9)
     "num_block_rot": 1,
+    "num_blocks_hidden": 0,  # 0 = all blocks visible
 }
 
 USE_PATH_TRACING = False  # false for real-time
@@ -91,17 +92,19 @@ def parse_args() -> argparse.Namespace:
     """Parse CLI arguments, falling back to defaults if not provided."""
     parser = argparse.ArgumentParser(description="Pallet SDG Replicator")
     parser.add_argument("--pallet-type",  type=str, default="epal")
-    parser.add_argument("--gen-liquid", type=int, default=None)
-    #parser.add_argument("--gen-liquid", action="store_true", default=False)
+    parser.add_argument("--output-dir",   type=str,   default=DEFAULTS["output_dir"])
+    parser.add_argument("--num-frames",   type=int,   default=DEFAULTS["num_frames"],
+                        help="Number of frames for replicator to generate")
     parser.add_argument("--pallet-path",  type=str,   default=DEFAULTS["pallet_path"],
                         help="Path to the pallet within Isaac Sim (Default: /scene/Meshes)")
+    
+    # NLP - Contamination
+    parser.add_argument("--gen-liquid", type=int, default=None)
+    #parser.add_argument("--gen-liquid", action="store_true", default=False)
     parser.add_argument("--mask-dir",     type=str, default=DEFAULTS["mask_dir"],
                         help="Path to masks for NLP pal contaminants")
     parser.add_argument("--shader-path",  type=str,   default=DEFAULTS["shader_path"],
                         help="Path to shader for NLP pallet (in sim)")
-    parser.add_argument("--output-dir",   type=str,   default=DEFAULTS["output_dir"])
-    parser.add_argument("--num-frames",   type=int,   default=DEFAULTS["num_frames"],
-                        help="Number of frames for replicator to generate")
     
     #Lights and Camera Variables
     parser.add_argument("--cam-dist-min", type=float, default=DEFAULTS["cam_dist_min"])
@@ -118,11 +121,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--textures",     type=str)
     # Block rotation args
     parser.add_argument("--block-rot-max",  type=float, default=DEFAULTS["block_rot_max"],
-                        help="Max twist angle per block in degrees (default: 15)")
+                        help="Max twist angle per block in degrees (default: 90)")
     parser.add_argument("--num-block-rot", type=int, default=DEFAULTS["num_block_rot"],
                         help="Probability each block is rotated each frame (default: 1)")
     parser.add_argument("--no-block-rot",   action="store_true", default=False,
                         help="Disable block rotation entirely")
+    parser.add_argument("--num-blocks-hidden", type=int, default=DEFAULTS["num_blocks_hidden"],
+                    help="Number of blocks to hide per frame (default: 0)")
     
     args, _ = parser.parse_known_args(sys.argv[1:])
     return args
@@ -274,6 +279,18 @@ def randomize_blocks(block_rot_max: float, num_block_rot: int, block_paths: List
             else:
                 rep.modify.pose(rotation=(0.0, 0.0, 0.0))
 
+def randomize_block_visibility(num_blocks_hidden: int, block_paths: List[str]) -> None:
+    # Recreate missing blocks
+    indices_to_hide = random.sample(range(len(block_paths)), min(num_blocks_hidden, len(block_paths)))
+
+    for i, block_path in enumerate(block_paths):
+        block = rep.get.prim_at_path(block_path)
+        with block:
+            if i in indices_to_hide:
+                rep.modify.visibility(visible=False)
+            else:
+                rep.modify.visibility(visible=True)
+
 def randomize_decal(shader, mask_paths: str) -> None:
     with shader:
         rep.modify.attribute(
@@ -343,10 +360,11 @@ def write_run_summary(output_dir, num_frames, pal_type, gen_liquid, args):
         f"Fill intensity:    {args.fill_int_min} – {args.fill_int_max}",
         f"Dome intensity:    {args.dome_int_min} – {args.dome_int_max}",
         f"",
-        f"--- Block Rotation ---",
+        f"--- Block Modifications ---",
         f"Enabled:           {not args.no_block_rot}",
         f"Blocks rotated:    {args.num_block_rot} / {len(BLOCK_PATHS)}",
         f"Max twist angle:   +/- {args.block_rot_max} deg",
+        f"Blocks hidden:     {args.num_blocks_hidden} / {len(BLOCK_PATHS)}",
         f"",
         f"--- Render ---",
         f"Render mode:       {render_mode}",
@@ -405,6 +423,8 @@ def main() -> None:
                 randomize_texture(pallet, textures)
                 if not args.no_block_rot:
                     randomize_blocks(args.block_rot_max, args.num_block_rot, BLOCK_PATHS)
+                if args.num_blocks_hidden > 0:
+                    randomize_block_visibility(args.num_blocks_hidden, BLOCK_PATHS)
             if gen_liquid : randomize_decal(shader,mask_paths)
 
         attach_writer(render_product, args.output_dir)
