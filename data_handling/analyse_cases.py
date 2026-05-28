@@ -2,8 +2,8 @@
 #NOTE: THIS IS A SCRIPT TO RUN TOOLS.PY (SOLWR's case analysis) IN LINUX
 
 # USAGE
-    uv run script.py --limit 10
-    uv run script.py /path/to/data --batch-size 5 --limit 10
+    uv run analyse_cases.py --limit 10
+    uv run analyse_cases.py /path/to/data --batch-size 5 --limit 10
 """
 import pathlib
 import subprocess

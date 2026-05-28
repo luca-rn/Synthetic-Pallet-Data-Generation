@@ -6,12 +6,12 @@ Scans a source folder and moves every direct subfolder that contains
 4 or fewer items (files + subfolders combined) to a destination folder.
 
 Usage:
-    python move_small_folders.py <source_folder> <destination_folder> [--dry-run] [--threshold N]
+    python quicksort_single_cam.py <source_folder> <destination_folder> [--dry-run] [--threshold N]
 
 Examples:
-    python move_small_folders.py ~/Downloads/projects ~/Archive
-    python move_small_folders.py ~/Downloads/projects ~/Archive --dry-run
-    python move_small_folders.py ~/Downloads/projects ~/Archive --threshold 6
+    python quicksort_single_cam.py ~/Downloads/projects ~/Archive
+    python quicksort_single_cam.py ~/Downloads/projects ~/Archive --dry-run
+    python quicksort_single_cam.py ~/Downloads/projects ~/Archive --threshold 6
 """
 
 import argparse
