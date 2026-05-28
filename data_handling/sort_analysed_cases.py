@@ -2,9 +2,14 @@
 sort_cases.py
 
 Sorts case folders into output categories based on type detection and results JSON files.
+Before sorting, reads any run_*.txt files (produced by sorting_folders.py) from the input
+directory to determine which cases have been analysed:
+  - Cases in "Succeeded": sorted normally.
+  - Cases in "Failed":    copied/moved to 1_no_json.
+  - Cases in neither:     skipped silently.
 
 Output folders:
-  1_no_json                     - No type/results JSON files found
+  1_no_json                     - No type/results JSON files found, or analysis failed
   2_eur_passing                 - EUR type, all thresholds passed
   3_eur_failing/
       single_defect/
@@ -38,6 +43,7 @@ Usage:
 
 import argparse
 import json
+import re
 import shutil
 from collections import defaultdict
 from pathlib import Path
@@ -89,8 +95,6 @@ EUR_DEFECT_DIRS = [
 ]
 
 # ── NLP Thresholds ────────────────────────────────────────────────────────────
-# Applied to both per-block fields (crack_block_*, hole_block_*, damage_block_*)
-# and aggregate fields (crack_entire_pallet, hole_entire_pallet, damage_entire_pallet).
 
 NLP_MAX_CRACK  = 0.01   # crack_block_* / crack_entire_pallet
 NLP_MAX_DAMAGE = 0.01   # damage_block_* / damage_entire_pallet
@@ -115,7 +119,51 @@ OUTPUT_DIRS = {
 }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# ── Run-log parsing ───────────────────────────────────────────────────────────
+
+def parse_run_logs(input_root: Path) -> tuple[set[str], set[str]]:
+    """
+    Scan input_root for run_*.txt files produced by sorting_folders.py.
+    Returns (succeeded, failed) as sets of case folder names.
+    The union across all log files is used so any case that succeeded in
+    any run is considered analysed.
+    """
+    succeeded: set[str] = set()
+    failed: set[str]    = set()
+
+    log_files = sorted(input_root.glob("run_*.txt"))
+    if not log_files:
+        return succeeded, failed
+
+    print(f"Found {len(log_files)} run log(s): {[f.name for f in log_files]}")
+
+    for log_file in log_files:
+        text = log_file.read_text(errors="replace")
+
+        # Split on the section headers written by sorting_folders.py
+        succeeded_match = re.search(r"--- Succeeded \(\d+\) ---\n(.*?)(?=\n--- |\Z)", text, re.DOTALL)
+        failed_match    = re.search(r"--- Failed \(\d+\) ---\n(.*?)(?=\n--- |\Z)",    text, re.DOTALL)
+
+        if succeeded_match:
+            for line in succeeded_match.group(1).splitlines():
+                name = line.strip()
+                if name and name != "None":
+                    succeeded.add(name)
+
+        if failed_match:
+            for line in failed_match.group(1).splitlines():
+                name = line.strip()
+                if name and name != "None":
+                    failed.add(name)
+
+    # A case that failed in one run but succeeded in a later one is considered OK
+    failed -= succeeded
+
+    print(f"  → {len(succeeded)} succeeded, {len(failed)} failed across all logs\n")
+    return succeeded, failed
+
+
+# ── JSON helpers ──────────────────────────────────────────────────────────────
 
 def load_json(path: Path) -> dict | list | None:
     try:
@@ -142,28 +190,18 @@ def check_prefix_thresholds(results: dict, prefix_thresholds: dict) -> list[str]
 
 def eur_field_to_defect(reason: str) -> str:
     field = reason.split("=")[0].strip()
-    if field.startswith("missing_block_"):
-        return "missing_block"
-    if field.startswith("missing_plank_"):
-        return "missing_plank"
-    if field in EDGE_BLOCK_ROTATION_FIELDS or field in MIDDLE_BLOCK_ROTATION_FIELDS:
-        return "rotation_block"
-    if field.startswith("rotation_plank_"):
-        return "rotation_plank"
-    if field.startswith("dislocation_block_"):
-        return "dislocation_block"
-    if field.startswith("volume_block_"):
-        return "volume_block"
-    if field.startswith("area_block_"):
-        return "area_block"
-    if field.startswith("chunk_plank_"):
-        return "chunk_plank"
-    if field.startswith("width_plank_"):
-        return "width_plank"
-    if field.startswith("unreadable_labels"):
-        return "unreadable_labels"
-    if field.startswith("lightness"):
-        return "wood_quality"
+    if field.startswith("missing_block_"):         return "missing_block"
+    if field.startswith("missing_plank_"):         return "missing_plank"
+    if field in EDGE_BLOCK_ROTATION_FIELDS \
+            or field in MIDDLE_BLOCK_ROTATION_FIELDS: return "rotation_block"
+    if field.startswith("rotation_plank_"):        return "rotation_plank"
+    if field.startswith("dislocation_block_"):     return "dislocation_block"
+    if field.startswith("volume_block_"):          return "volume_block"
+    if field.startswith("area_block_"):            return "area_block"
+    if field.startswith("chunk_plank_"):           return "chunk_plank"
+    if field.startswith("width_plank_"):           return "width_plank"
+    if field.startswith("unreadable_labels"):      return "unreadable_labels"
+    if field.startswith("lightness"):              return "wood_quality"
     return "unknown"
 
 
@@ -205,51 +243,36 @@ def passes_eur(results: dict) -> tuple[bool, list[str]]:
 # ── NLP helpers ───────────────────────────────────────────────────────────────
 
 def nlp_field_to_defect(reason: str) -> str:
-    """Map a raw NLP failure reason string to a defect category name."""
     field = reason.split("=")[0].strip()
-    if field.startswith("crack"):
-        return "crack"
-    if field.startswith("damage"):
-        return "damage"
-    if field.startswith("hole"):
-        return "hole"
-    if field.startswith("dirt"):
-        return "dirt"
+    if field.startswith("crack"):  return "crack"
+    if field.startswith("damage"): return "damage"
+    if field.startswith("hole"):   return "hole"
+    if field.startswith("dirt"):   return "dirt"
     return "unknown"
 
 
 def passes_nlp(results: dict) -> tuple[bool, list[str]]:
-    """Check all NLP rules. Returns (passed, [failure_messages])."""
     failures = []
-
     for field, value in results.items():
-        # Crack — per-block or aggregate
         if field.startswith("crack"):
             if value > NLP_MAX_CRACK:
                 failures.append(f"{field}={value:.6f} > max_crack {NLP_MAX_CRACK}")
-        # Damage — per-block or aggregate
         elif field.startswith("damage"):
             if value > NLP_MAX_DAMAGE:
                 failures.append(f"{field}={value:.6f} > max_damage {NLP_MAX_DAMAGE}")
-        # Hole — per-block or aggregate
         elif field.startswith("hole"):
             if value > NLP_MAX_HOLE:
                 failures.append(f"{field}={value:.6f} > max_hole {NLP_MAX_HOLE}")
-        # Dirt
         elif field.startswith("dirt"):
             if value > NLP_MAX_DIRT:
                 failures.append(f"{field}={value:.6f} > max_dirt {NLP_MAX_DIRT}")
-
     return (len(failures) == 0), failures
 
 
 # ── Classification ────────────────────────────────────────────────────────────
 
 def classify_case(case_dir: Path) -> tuple[str, list[str], list[str]]:
-    """
-    Returns (category_key, [failure_reasons], [defect_categories]).
-    defect_categories is a deduplicated sorted list of defect category names.
-    """
+    """Returns (category_key, [failure_reasons], [defect_categories])."""
     type_file    = case_dir / "expected_type_detection.json"
     results_file = case_dir / "results.json"
 
@@ -315,20 +338,46 @@ def copy_or_move(src: Path, dest: Path, copy: bool) -> None:
 def sort_cases(input_root: Path, output_root: Path, copy: bool = True) -> None:
     ensure_dirs(output_root)
 
-    counts: dict[str, int]              = defaultdict(int)
-    eur_defect_counts: dict[str, int]   = defaultdict(int)
-    nlp_defect_counts: dict[str, int]   = defaultdict(int)
-    eur_field_counts: dict[str, int]    = defaultdict(int)
-    nlp_field_counts: dict[str, int]    = defaultdict(int)
-    per_case_failures: dict[str, dict]  = {}
+    # ── Load run logs ─────────────────────────────────────────────────────────
+    logs_present = any(input_root.glob("run_*.txt"))
+    succeeded, run_failed = parse_run_logs(input_root)
+
+    counts: dict[str, int]             = defaultdict(int)
+    eur_defect_counts: dict[str, int]  = defaultdict(int)
+    nlp_defect_counts: dict[str, int]  = defaultdict(int)
+    eur_field_counts: dict[str, int]   = defaultdict(int)
+    nlp_field_counts: dict[str, int]   = defaultdict(int)
+    per_case_failures: dict[str, dict] = {}
+    skipped_cases: list[str]           = []
+    log_failed_cases: list[str]        = []
 
     case_dirs = sorted([p for p in input_root.iterdir() if p.is_dir()])
     print(f"Found {len(case_dirs)} case folder(s) in {input_root}\n")
 
     for case_dir in case_dirs:
+
+        # ── Run-log filtering ─────────────────────────────────────────────────
+        if logs_present:
+            if case_dir.name in run_failed:
+                # Analysis failed — send straight to no_json
+                dest = output_root / OUTPUT_DIRS["no_json"] / case_dir.name
+                try:
+                    copy_or_move(case_dir, dest, copy)
+                    counts["no_json"] += 1
+                    log_failed_cases.append(case_dir.name)
+                    print(f"  [LOG FAIL]  {case_dir.name}  →  {OUTPUT_DIRS['no_json']}  (analysis failed)")
+                except FileExistsError:
+                    print(f"  [SKIP] {dest} already exists — skipping.")
+                continue
+
+            if case_dir.name not in succeeded:
+                # Not in any log — skip silently
+                skipped_cases.append(case_dir.name)
+                continue
+
+        # ── Normal classification ─────────────────────────────────────────────
         category, failures, defect_categories = classify_case(case_dir)
 
-        # ── Determine destination ─────────────────────────────────────────────
         if category in ("eur_failing", "nlp_failing"):
             failing_root = output_root / OUTPUT_DIRS[category]
             if len(defect_categories) > 1:
@@ -344,7 +393,6 @@ def sort_cases(input_root: Path, output_root: Path, copy: bool = True) -> None:
             dest = output_root / OUTPUT_DIRS[category] / case_dir.name
             dest_label = OUTPUT_DIRS[category]
 
-        # ── Track stats ───────────────────────────────────────────────────────
         if failures:
             per_case_failures[case_dir.name] = {
                 "type": "EUR" if category.startswith("eur") else "NLP",
@@ -352,15 +400,13 @@ def sort_cases(input_root: Path, output_root: Path, copy: bool = True) -> None:
                 "failures": failures,
                 "destination": dest_label,
             }
-            field_counts = eur_field_counts if category.startswith("eur") else nlp_field_counts
+            field_counts  = eur_field_counts  if category.startswith("eur") else nlp_field_counts
             defect_counts = eur_defect_counts if category.startswith("eur") else nlp_defect_counts
             for cat in defect_categories:
                 defect_counts[cat] += 1
             for reason in failures:
-                bucket = reason.split("=")[0].strip()
-                field_counts[bucket] += 1
+                field_counts[reason.split("=")[0].strip()] += 1
 
-        # ── Copy / move ───────────────────────────────────────────────────────
         try:
             copy_or_move(case_dir, dest, copy)
             counts[category] += 1
@@ -384,7 +430,9 @@ def sort_cases(input_root: Path, output_root: Path, copy: bool = True) -> None:
     print("\n── Case counts ──────────────────────────────")
     for key, dirname in OUTPUT_DIRS.items():
         print(f"  {dirname}: {counts[key]}")
-    print(f"  Total: {total}")
+    print(f"  Total processed : {total}")
+    if skipped_cases:
+        print(f"  Skipped (not in any run log) : {len(skipped_cases)}")
 
     if eur_defect_counts:
         print("\n── EUR failing cases by defect category ──")
@@ -402,6 +450,22 @@ def sort_cases(input_root: Path, output_root: Path, copy: bool = True) -> None:
 
         f.write("SORTING SUMMARY\n")
         f.write("=" * 60 + "\n\n")
+
+        # ── Run-log status ────────────────────────────────────────────────────
+        if logs_present:
+            f.write("── Run log filtering ───────────────────────────────────────\n")
+            f.write(f"  Logs found          : {sum(1 for _ in input_root.glob('run_*.txt'))}\n")
+            f.write(f"  Succeeded (analysed): {len(succeeded)}\n")
+            f.write(f"  Failed in logs      : {len(run_failed)}\n")
+            f.write(f"  Skipped (not in any log): {len(skipped_cases)}\n")
+            if log_failed_cases:
+                f.write(f"\n  Cases sent to no_json due to analysis failure:\n")
+                for name in sorted(log_failed_cases):
+                    f.write(f"    - {name}\n")
+            f.write("\n")
+        else:
+            f.write("── Run log filtering ───────────────────────────────────────\n")
+            f.write("  No run_*.txt files found — all cases processed without filtering.\n\n")
 
         # ── Thresholds ────────────────────────────────────────────────────────
         f.write("── EUR thresholds ──────────────────────────────────────────\n")
@@ -427,7 +491,9 @@ def sort_cases(input_root: Path, output_root: Path, copy: bool = True) -> None:
         f.write("\n── Case counts ─────────────────────────────────────────────\n")
         for key, dirname in OUTPUT_DIRS.items():
             f.write(f"  {dirname:<30}: {counts[key]:>4}\n")
-        f.write(f"  {'Total':<30}: {total:>4}\n")
+        f.write(f"  {'Total processed':<30}: {total:>4}\n")
+        if skipped_cases:
+            f.write(f"  {'Skipped (not analysed)':<30}: {len(skipped_cases):>4}\n")
 
         eur_failing_cases = {k: v for k, v in per_case_failures.items() if v["type"] == "EUR"}
         nlp_failing_cases = {k: v for k, v in per_case_failures.items() if v["type"] == "NLP"}
