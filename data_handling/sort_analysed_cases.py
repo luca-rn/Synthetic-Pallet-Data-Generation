@@ -37,8 +37,8 @@ Output folders:
 A summary report (sorting_summary.txt) is written to the output root.
 
 Usage:
-  python sort_cases.py --input /path/to/case/folders --output /path/to/output
-  python sort_cases.py --input /path/to/case/folders --output /path/to/output --move
+  uv run sort_cases.py --input /path/to/case/folders --output /path/to/output
+  uv run sort_cases.py --input /path/to/case/folders --output /path/to/output --move
 """
 
 import argparse
