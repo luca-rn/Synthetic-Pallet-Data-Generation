@@ -9,9 +9,9 @@ Usage:
     python quicksort_single_cam.py <source_folder> <destination_folder> [--dry-run] [--threshold N]
 
 Examples:
-    python quicksort_single_cam.py ~/Downloads/projects ~/Archive
-    python quicksort_single_cam.py ~/Downloads/projects ~/Archive --dry-run
-    python quicksort_single_cam.py ~/Downloads/projects ~/Archive --threshold 6
+    python quicksort_single_cam.py ~/Drive/data ~/Archive
+    python quicksort_single_cam.py ~/Drive/data ~/Archive --dry-run
+    python quicksort_single_cam.py ~/Drive/data ~/Archive --threshold 5
 """
 
 import argparse
