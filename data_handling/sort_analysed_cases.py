@@ -4,13 +4,32 @@ sort_cases.py
 Sorts case folders into output categories based on type detection and results JSON files.
 
 Output folders:
-  1_no_json       - No type/results JSON files found
-  2_eur_passing   - EUR type, results pass all thresholds
-  3_eur_failing   - EUR type, results fail one or more thresholds
-  4_nlp           - NLP type (no pass/fail limits defined yet)
+  1_no_json                     - No type/results JSON files found
+  2_eur_passing                 - EUR type, all thresholds passed
+  3_eur_failing/
+      single_defect/
+          missing_block         - Only defect: a block is missing
+          missing_plank         - Only defect: a plank is missing
+          rotation_block        - Only defect: block rotation out of bounds
+          rotation_plank        - Only defect: plank angle out of bounds
+          dislocation_block     - Only defect: block dislocation out of bounds
+          volume_block          - Only defect: block volume too low
+          area_block            - Only defect: block area too low
+          chunk_plank           - Only defect: plank chunk too high
+          width_plank           - Only defect: plank width too low
+          unreadable_labels     - Only defect: too many unreadable labels
+          wood_quality          - Only defect: lightness too low
+      multiple_defects          - Two or more distinct defect categories
+  4_nlp_passing                 - NLP type, all thresholds passed
+  5_nlp_failing/
+      single_defect/
+          crack                 - Only defect: crack above threshold
+          damage                - Only defect: damage above threshold
+          hole                  - Only defect: hole above threshold
+          dirt                  - Only defect: dirt level above threshold
+      multiple_defects          - Two or more distinct defect categories
 
-A failure report (eur_failure_report.txt) is written to the output root,
-showing which rules triggered failures and a per-case breakdown.
+A summary report (sorting_summary.txt) is written to the output root.
 
 Usage:
   python sort_cases.py --input /path/to/case/folders --output /path/to/output
@@ -32,7 +51,6 @@ EUR_MAX_ROTATION_EDGE_BLOCK   = 8.50    # rotation_block_{front/back/mid}_{left/
 EUR_MAX_ROTATION_MIDDLE_BLOCK = 20.0    # rotation_block_{front/back/mid}_middle
 EUR_MAX_PLANK_ANGLE           = 1.0     # rotation_plank_*
 
-# Prefix-based rules applied to all matching fields: (min, max), None = no bound
 EUR_PREFIX_THRESHOLDS: dict[str, tuple[float | None, float | None]] = {
     "dislocation_block_":   (None, 0.022),
     "volume_block_":        (0.80, None),
@@ -56,18 +74,48 @@ MIDDLE_BLOCK_ROTATION_FIELDS = {
     "rotation_block_mid_middle",
 }
 
-# ── NLP Thresholds ────────────────────────────────────────────────────────────
-# No limits defined yet — all NLP cases go into a single folder.
+EUR_DEFECT_DIRS = [
+    "missing_block",
+    "missing_plank",
+    "rotation_block",
+    "rotation_plank",
+    "dislocation_block",
+    "volume_block",
+    "area_block",
+    "chunk_plank",
+    "width_plank",
+    "unreadable_labels",
+    "wood_quality",
+]
 
-# ─────────────────────────────────────────────────────────────────────────────
+# ── NLP Thresholds ────────────────────────────────────────────────────────────
+# Applied to both per-block fields (crack_block_*, hole_block_*, damage_block_*)
+# and aggregate fields (crack_entire_pallet, hole_entire_pallet, damage_entire_pallet).
+
+NLP_MAX_CRACK  = 0.01   # crack_block_* / crack_entire_pallet
+NLP_MAX_DAMAGE = 0.01   # damage_block_* / damage_entire_pallet
+NLP_MAX_HOLE   = 0.01   # hole_block_* / hole_entire_pallet
+NLP_MAX_DIRT   = 0.08   # dirt_level_top_plate
+
+NLP_DEFECT_DIRS = [
+    "crack",
+    "damage",
+    "hole",
+    "dirt",
+]
+
+# ── Top-level output folders ──────────────────────────────────────────────────
 
 OUTPUT_DIRS = {
-    "no_json":     "1_no_json",
-    "eur_passing": "2_eur_passing",
-    "eur_failing": "3_eur_failing",
-    "nlp":         "4_nlp",
+    "no_json":      "1_no_json",
+    "eur_passing":  "2_eur_passing",
+    "eur_failing":  "3_eur_failing",
+    "nlp_passing":  "4_nlp_passing",
+    "nlp_failing":  "5_nlp_failing",
 }
 
+
+# ─────────────────────────────────────────────────────────────────────────────
 
 def load_json(path: Path) -> dict | list | None:
     try:
@@ -78,8 +126,9 @@ def load_json(path: Path) -> dict | list | None:
         return None
 
 
+# ── EUR helpers ───────────────────────────────────────────────────────────────
+
 def check_prefix_thresholds(results: dict, prefix_thresholds: dict) -> list[str]:
-    """Return failure messages for any field violating a prefix-matched rule."""
     failures = []
     for field, value in results.items():
         for prefix, (lo, hi) in prefix_thresholds.items():
@@ -91,43 +140,61 @@ def check_prefix_thresholds(results: dict, prefix_thresholds: dict) -> list[str]
     return failures
 
 
+def eur_field_to_defect(reason: str) -> str:
+    field = reason.split("=")[0].strip()
+    if field.startswith("missing_block_"):
+        return "missing_block"
+    if field.startswith("missing_plank_"):
+        return "missing_plank"
+    if field in EDGE_BLOCK_ROTATION_FIELDS or field in MIDDLE_BLOCK_ROTATION_FIELDS:
+        return "rotation_block"
+    if field.startswith("rotation_plank_"):
+        return "rotation_plank"
+    if field.startswith("dislocation_block_"):
+        return "dislocation_block"
+    if field.startswith("volume_block_"):
+        return "volume_block"
+    if field.startswith("area_block_"):
+        return "area_block"
+    if field.startswith("chunk_plank_"):
+        return "chunk_plank"
+    if field.startswith("width_plank_"):
+        return "width_plank"
+    if field.startswith("unreadable_labels"):
+        return "unreadable_labels"
+    if field.startswith("lightness"):
+        return "wood_quality"
+    return "unknown"
+
+
 def passes_eur(results: dict) -> tuple[bool, list[str]]:
-    """Check all EUR rules. Returns (passed, [failure_messages])."""
     failures = []
 
-    # 1. Prefix-based numeric thresholds
     failures += check_prefix_thresholds(results, EUR_PREFIX_THRESHOLDS)
 
-    # 2. Rotation — edge blocks
     for field in EDGE_BLOCK_ROTATION_FIELDS:
         value = results.get(field)
         if value is not None and value > EUR_MAX_ROTATION_EDGE_BLOCK:
             failures.append(f"{field}={value:.4f} > max_rotation_edge {EUR_MAX_ROTATION_EDGE_BLOCK}")
 
-    # 3. Rotation — middle blocks
     for field in MIDDLE_BLOCK_ROTATION_FIELDS:
         value = results.get(field)
         if value is not None and value > EUR_MAX_ROTATION_MIDDLE_BLOCK:
             failures.append(f"{field}={value:.4f} > max_rotation_middle {EUR_MAX_ROTATION_MIDDLE_BLOCK}")
 
-    # 4. Plank angle (rotation_plank_*)
     for field, value in results.items():
-        if field.startswith("rotation_plank_"):
-            if value > EUR_MAX_PLANK_ANGLE:
-                failures.append(f"{field}={value:.4f} > max_plank_angle {EUR_MAX_PLANK_ANGLE}")
+        if field.startswith("rotation_plank_") and value > EUR_MAX_PLANK_ANGLE:
+            failures.append(f"{field}={value:.4f} > max_plank_angle {EUR_MAX_PLANK_ANGLE}")
 
-    # 5. Missing objects
     if not EUR_LIMIT_MISSING_OBJECT:
         for field, value in results.items():
             if (field.startswith("missing_block_") or field.startswith("missing_plank_")) and value is True:
                 failures.append(f"{field} is True (missing not allowed)")
 
-    # 6. Unreadable labels
     unreadable = results.get("unreadable_labels_entire_pallet")
     if unreadable is not None and unreadable > EUR_MAX_UNREADABLE_LABELS:
         failures.append(f"unreadable_labels_entire_pallet={unreadable} > max {EUR_MAX_UNREADABLE_LABELS}")
 
-    # 7. Wood quality (lightness)
     lightness = results.get("lightness_entire_pallet")
     if lightness is not None and lightness < EUR_MIN_WOOD_QUALITY:
         failures.append(f"lightness_entire_pallet={lightness:.4f} < min_wood_quality {EUR_MIN_WOOD_QUALITY}")
@@ -135,113 +202,282 @@ def passes_eur(results: dict) -> tuple[bool, list[str]]:
     return (len(failures) == 0), failures
 
 
-def classify_case(case_dir: Path) -> tuple[str, list[str]]:
-    """Returns (category_key, [failure_reasons])."""
+# ── NLP helpers ───────────────────────────────────────────────────────────────
+
+def nlp_field_to_defect(reason: str) -> str:
+    """Map a raw NLP failure reason string to a defect category name."""
+    field = reason.split("=")[0].strip()
+    if field.startswith("crack"):
+        return "crack"
+    if field.startswith("damage"):
+        return "damage"
+    if field.startswith("hole"):
+        return "hole"
+    if field.startswith("dirt"):
+        return "dirt"
+    return "unknown"
+
+
+def passes_nlp(results: dict) -> tuple[bool, list[str]]:
+    """Check all NLP rules. Returns (passed, [failure_messages])."""
+    failures = []
+
+    for field, value in results.items():
+        # Crack — per-block or aggregate
+        if field.startswith("crack"):
+            if value > NLP_MAX_CRACK:
+                failures.append(f"{field}={value:.6f} > max_crack {NLP_MAX_CRACK}")
+        # Damage — per-block or aggregate
+        elif field.startswith("damage"):
+            if value > NLP_MAX_DAMAGE:
+                failures.append(f"{field}={value:.6f} > max_damage {NLP_MAX_DAMAGE}")
+        # Hole — per-block or aggregate
+        elif field.startswith("hole"):
+            if value > NLP_MAX_HOLE:
+                failures.append(f"{field}={value:.6f} > max_hole {NLP_MAX_HOLE}")
+        # Dirt
+        elif field.startswith("dirt"):
+            if value > NLP_MAX_DIRT:
+                failures.append(f"{field}={value:.6f} > max_dirt {NLP_MAX_DIRT}")
+
+    return (len(failures) == 0), failures
+
+
+# ── Classification ────────────────────────────────────────────────────────────
+
+def classify_case(case_dir: Path) -> tuple[str, list[str], list[str]]:
+    """
+    Returns (category_key, [failure_reasons], [defect_categories]).
+    defect_categories is a deduplicated sorted list of defect category names.
+    """
     type_file    = case_dir / "expected_type_detection.json"
     results_file = case_dir / "results.json"
 
     if not type_file.exists() or not results_file.exists():
-        return "no_json", []
+        return "no_json", [], []
 
     type_data    = load_json(type_file)
     results_data = load_json(results_file)
 
     if type_data is None or results_data is None:
-        return "no_json", []
+        return "no_json", [], []
 
     try:
         pallet_type = type_data["result"][0].upper()
     except (KeyError, IndexError, TypeError):
         print(f"  [WARN] Unexpected type format in {type_file}")
-        return "no_json", []
+        return "no_json", [], []
 
     if not isinstance(results_data, dict):
         print(f"  [WARN] results.json is not a dict in {case_dir}")
-        return "no_json", []
+        return "no_json", [], []
 
     if pallet_type == "EUR":
         passed, failures = passes_eur(results_data)
-        return ("eur_passing" if passed else "eur_failing"), failures
+        if passed:
+            return "eur_passing", [], []
+        defect_categories = sorted(set(eur_field_to_defect(r) for r in failures))
+        return "eur_failing", failures, defect_categories
+
     elif pallet_type == "NLP":
-        return "nlp", []
+        passed, failures = passes_nlp(results_data)
+        if passed:
+            return "nlp_passing", [], []
+        defect_categories = sorted(set(nlp_field_to_defect(r) for r in failures))
+        return "nlp_failing", failures, defect_categories
+
     else:
         print(f"  [WARN] Unknown pallet type '{pallet_type}' in {case_dir}")
-        return "no_json", []
+        return "no_json", [], []
 
 
-def sort_cases(input_root: Path, output_root: Path, copy: bool = True) -> None:
+# ── Directory setup ───────────────────────────────────────────────────────────
+
+def ensure_dirs(output_root: Path) -> None:
     for dirname in OUTPUT_DIRS.values():
         (output_root / dirname).mkdir(parents=True, exist_ok=True)
 
-    counts: dict[str, int]            = defaultdict(int)
-    failure_tracker: dict[str, int]   = defaultdict(int)   # rule/field -> count
-    per_case_failures: dict[str, list[str]] = {}            # case name -> reasons
+    for failing_key, defect_dirs in [("eur_failing", EUR_DEFECT_DIRS),
+                                      ("nlp_failing", NLP_DEFECT_DIRS)]:
+        failing_root = output_root / OUTPUT_DIRS[failing_key]
+        (failing_root / "multiple_defects").mkdir(parents=True, exist_ok=True)
+        for defect in defect_dirs:
+            (failing_root / "single_defect" / defect).mkdir(parents=True, exist_ok=True)
+
+
+def copy_or_move(src: Path, dest: Path, copy: bool) -> None:
+    action = shutil.copytree if copy else shutil.move
+    action(str(src), str(dest))
+
+
+# ── Main sort logic ───────────────────────────────────────────────────────────
+
+def sort_cases(input_root: Path, output_root: Path, copy: bool = True) -> None:
+    ensure_dirs(output_root)
+
+    counts: dict[str, int]              = defaultdict(int)
+    eur_defect_counts: dict[str, int]   = defaultdict(int)
+    nlp_defect_counts: dict[str, int]   = defaultdict(int)
+    eur_field_counts: dict[str, int]    = defaultdict(int)
+    nlp_field_counts: dict[str, int]    = defaultdict(int)
+    per_case_failures: dict[str, dict]  = {}
 
     case_dirs = sorted([p for p in input_root.iterdir() if p.is_dir()])
     print(f"Found {len(case_dirs)} case folder(s) in {input_root}\n")
 
     for case_dir in case_dirs:
-        category, failures = classify_case(case_dir)
-        dest = output_root / OUTPUT_DIRS[category] / case_dir.name
+        category, failures, defect_categories = classify_case(case_dir)
 
-        if failures:
-            per_case_failures[case_dir.name] = failures
-            for reason in failures:
-                # Bucket by the field/rule name (part before '=')
-                bucket = reason.split("=")[0].strip()
-                failure_tracker[bucket] += 1
-
-        action = shutil.copytree if copy else shutil.move
-        try:
-            action(str(case_dir), str(dest))
-            counts[category] += 1
-            if category == "eur_passing":
-                tag = "PASS"
-            elif category == "eur_failing":
-                tag = "FAIL"
-            elif category == "nlp":
-                tag = "NLP "
+        # ── Determine destination ─────────────────────────────────────────────
+        if category in ("eur_failing", "nlp_failing"):
+            failing_root = output_root / OUTPUT_DIRS[category]
+            if len(defect_categories) > 1:
+                dest = failing_root / "multiple_defects" / case_dir.name
+                dest_label = f"{OUTPUT_DIRS[category]}/multiple_defects"
+            elif len(defect_categories) == 1:
+                dest = failing_root / "single_defect" / defect_categories[0] / case_dir.name
+                dest_label = f"{OUTPUT_DIRS[category]}/single_defect/{defect_categories[0]}"
             else:
-                tag = "    "
-            print(f"  [{tag}]  {case_dir.name}")
+                dest = failing_root / "multiple_defects" / case_dir.name
+                dest_label = f"{OUTPUT_DIRS[category]}/multiple_defects"
+        else:
+            dest = output_root / OUTPUT_DIRS[category] / case_dir.name
+            dest_label = OUTPUT_DIRS[category]
+
+        # ── Track stats ───────────────────────────────────────────────────────
+        if failures:
+            per_case_failures[case_dir.name] = {
+                "type": "EUR" if category.startswith("eur") else "NLP",
+                "defect_categories": defect_categories,
+                "failures": failures,
+                "destination": dest_label,
+            }
+            field_counts = eur_field_counts if category.startswith("eur") else nlp_field_counts
+            defect_counts = eur_defect_counts if category.startswith("eur") else nlp_defect_counts
+            for cat in defect_categories:
+                defect_counts[cat] += 1
+            for reason in failures:
+                bucket = reason.split("=")[0].strip()
+                field_counts[bucket] += 1
+
+        # ── Copy / move ───────────────────────────────────────────────────────
+        try:
+            copy_or_move(case_dir, dest, copy)
+            counts[category] += 1
+
+            tag_map = {
+                "eur_passing": "EUR PASS",
+                "eur_failing": "EUR FAIL",
+                "nlp_passing": "NLP PASS",
+                "nlp_failing": "NLP FAIL",
+                "no_json":     "        ",
+            }
+            tag = tag_map.get(category, "        ")
+            print(f"  [{tag}]  {case_dir.name}  →  {dest_label}")
             for r in failures:
-                print(f"          ↳ {r}")
+                print(f"             ↳ {r}")
         except FileExistsError:
             print(f"  [SKIP] {dest} already exists — skipping.")
 
     # ── Console summary ───────────────────────────────────────────────────────
+    total = sum(counts.values())
     print("\n── Case counts ──────────────────────────────")
     for key, dirname in OUTPUT_DIRS.items():
         print(f"  {dirname}: {counts[key]}")
-    print(f"  Total: {sum(counts.values())}")
+    print(f"  Total: {total}")
 
-    if failure_tracker:
-        print("\n── EUR failure reasons (by field/rule, most common first) ──")
-        for bucket, count in sorted(failure_tracker.items(), key=lambda x: -x[1]):
-            print(f"  {count:>4}x  {bucket}")
+    if eur_defect_counts:
+        print("\n── EUR failing cases by defect category ──")
+        for cat, n in sorted(eur_defect_counts.items(), key=lambda x: -x[1]):
+            print(f"  {n:>4}x  {cat}")
 
-    # ── Failure report file ───────────────────────────────────────────────────
-    if per_case_failures:
-        report_path = output_root / "eur_failure_report.txt"
-        with open(report_path, "w") as f:
-            f.write("EUR FAILURE REPORT\n")
-            f.write("=" * 60 + "\n\n")
+    if nlp_defect_counts:
+        print("\n── NLP failing cases by defect category ──")
+        for cat, n in sorted(nlp_defect_counts.items(), key=lambda x: -x[1]):
+            print(f"  {n:>4}x  {cat}")
 
-            f.write("── Failures by field/rule (most common first) ──\n")
-            for bucket, count in sorted(failure_tracker.items(), key=lambda x: -x[1]):
-                f.write(f"  {count:>4}x  {bucket}\n")
+    # ── Write TXT summary ─────────────────────────────────────────────────────
+    report_path = output_root / "sorting_summary.txt"
+    with open(report_path, "w") as f:
 
-            f.write(f"\n── Per-case breakdown ({len(per_case_failures)} failing cases) ──\n")
-            for case_name, reasons in sorted(per_case_failures.items()):
-                f.write(f"\n{case_name}:\n")
-                for r in reasons:
-                    f.write(f"  - {r}\n")
+        f.write("SORTING SUMMARY\n")
+        f.write("=" * 60 + "\n\n")
 
-        print(f"\n  Failure report saved → {report_path}")
+        # ── Thresholds ────────────────────────────────────────────────────────
+        f.write("── EUR thresholds ──────────────────────────────────────────\n")
+        f.write(f"  missing_block / missing_plank : {'not allowed' if not EUR_LIMIT_MISSING_OBJECT else 'allowed'}\n")
+        f.write(f"  unreadable_labels             : max {EUR_MAX_UNREADABLE_LABELS}\n")
+        f.write(f"  wood_quality (lightness)      : min {EUR_MIN_WOOD_QUALITY}\n")
+        f.write(f"  rotation edge blocks          : max {EUR_MAX_ROTATION_EDGE_BLOCK}\n")
+        f.write(f"  rotation middle blocks        : max {EUR_MAX_ROTATION_MIDDLE_BLOCK}\n")
+        f.write(f"  rotation planks               : max {EUR_MAX_PLANK_ANGLE}\n")
+        for prefix, (lo, hi) in EUR_PREFIX_THRESHOLDS.items():
+            parts = []
+            if lo is not None: parts.append(f"min {lo}")
+            if hi is not None: parts.append(f"max {hi}")
+            f.write(f"  {prefix:<30}: {', '.join(parts)}\n")
+
+        f.write("\n── NLP thresholds ──────────────────────────────────────────\n")
+        f.write(f"  crack  (crack_block_* / crack_entire_pallet)   : max {NLP_MAX_CRACK}\n")
+        f.write(f"  damage (damage_block_* / damage_entire_pallet) : max {NLP_MAX_DAMAGE}\n")
+        f.write(f"  hole   (hole_block_* / hole_entire_pallet)     : max {NLP_MAX_HOLE}\n")
+        f.write(f"  dirt   (dirt_level_top_plate)                  : max {NLP_MAX_DIRT}\n")
+
+        # ── Case counts ───────────────────────────────────────────────────────
+        f.write("\n── Case counts ─────────────────────────────────────────────\n")
+        for key, dirname in OUTPUT_DIRS.items():
+            f.write(f"  {dirname:<30}: {counts[key]:>4}\n")
+        f.write(f"  {'Total':<30}: {total:>4}\n")
+
+        eur_failing_cases = {k: v for k, v in per_case_failures.items() if v["type"] == "EUR"}
+        nlp_failing_cases = {k: v for k, v in per_case_failures.items() if v["type"] == "NLP"}
+
+        for label, failing_cases in [("EUR", eur_failing_cases), ("NLP", nlp_failing_cases)]:
+            if not failing_cases:
+                continue
+            n_single = sum(1 for v in failing_cases.values() if len(v["defect_categories"]) == 1)
+            n_multi  = sum(1 for v in failing_cases.values() if len(v["defect_categories"]) > 1)
+            f.write(f"\n  {label} failing breakdown:\n")
+            f.write(f"    Single-defect cases : {n_single}\n")
+            f.write(f"    Multi-defect cases  : {n_multi}\n")
+
+        # ── Defect category breakdowns ────────────────────────────────────────
+        for label, defect_counts in [("EUR", eur_defect_counts), ("NLP", nlp_defect_counts)]:
+            if not defect_counts:
+                continue
+            f.write(f"\n── {label} failing cases by defect category ─────────────────\n")
+            f.write("  (a multi-defect case is counted once per category it triggered)\n")
+            for cat, n in sorted(defect_counts.items(), key=lambda x: -x[1]):
+                bar = "█" * n
+                f.write(f"  {cat:<22}: {n:>4}  {bar}\n")
+
+        # ── Field-level failure counts ────────────────────────────────────────
+        for label, field_counts in [("EUR", eur_field_counts), ("NLP", nlp_field_counts)]:
+            if not field_counts:
+                continue
+            f.write(f"\n── {label} individual field failures (most common first) ───────\n")
+            for field, n in sorted(field_counts.items(), key=lambda x: -x[1]):
+                f.write(f"  {n:>4}x  {field}\n")
+
+        # ── Per-case breakdown ────────────────────────────────────────────────
+        for label, failing_cases in [("EUR", eur_failing_cases), ("NLP", nlp_failing_cases)]:
+            if not failing_cases:
+                continue
+            f.write(f"\n── {label} per-case breakdown ({len(failing_cases)} failing cases) ───────────\n")
+            for case_name, info in sorted(failing_cases.items()):
+                cats = ", ".join(info["defect_categories"])
+                f.write(f"\n  {case_name}\n")
+                f.write(f"    Destination : {info['destination']}\n")
+                f.write(f"    Categories  : {cats}\n")
+                f.write(f"    Failures    :\n")
+                for r in info["failures"]:
+                    f.write(f"      - {r}\n")
+
+    print(f"\n  Summary report saved → {report_path}")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Sort pallet case folders by type and pass/fail.")
+    parser = argparse.ArgumentParser(description="Sort pallet case folders by type and defect category.")
     parser.add_argument("--input",  required=True, help="Root folder containing case sub-folders")
     parser.add_argument("--output", required=True, help="Root folder where sorted sub-folders will be created")
     parser.add_argument("--move",   action="store_true", help="Move folders instead of copying (default: copy)")
