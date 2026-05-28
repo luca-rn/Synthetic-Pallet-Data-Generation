@@ -1,5 +1,5 @@
 """
-sort_cases.py
+sort_analysed_cases.py
 
 Sorts case folders into output categories based on type detection and results JSON files.
 Before sorting, reads any run_*.txt files (produced by sorting_folders.py) from the input
@@ -37,8 +37,8 @@ Output folders:
 A summary report (sorting_summary.txt) is written to the output root.
 
 Usage:
-  uv run sort_cases.py --input /path/to/case/folders --output /path/to/output
-  uv run sort_cases.py --input /path/to/case/folders --output /path/to/output --move
+  python sort_analysed_cases.py --input /path/to/case/folders --output /path/to/output
+  python sort_analysed_cases.py --input /path/to/case/folders --output /path/to/output --move
 """
 
 import argparse
@@ -446,7 +446,7 @@ def sort_cases(input_root: Path, output_root: Path, copy: bool = True) -> None:
 
     # ── Write TXT summary ─────────────────────────────────────────────────────
     report_path = output_root / "sorting_summary.txt"
-    with open(report_path, "w") as f:
+    with open(report_path, "w", encoding="utf-8") as f:
 
         f.write("SORTING SUMMARY\n")
         f.write("=" * 60 + "\n\n")
