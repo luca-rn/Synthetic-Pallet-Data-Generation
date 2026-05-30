@@ -2,7 +2,14 @@
 # randomised because that gives wider distribution of data
 # alternative is a procedural list (incrementally increasing), but randomised is likely better for more robust learning on less data
 # incremental can be implemented is needed
-
+"""
+Usage:
+    python generate_rotation_schedule.py
+    python generate_rotation_schedule.py --defect
+    python generate_rotation_schedule.py --focus back          # blocks 6,7,8 only
+    python generate_rotation_schedule.py --focus 0,1,2,3
+    python generate_rotation_schedule.py --defect --focus end --frames 200 --out defect_end.json
+"""
 import argparse
 import json
 import random, math

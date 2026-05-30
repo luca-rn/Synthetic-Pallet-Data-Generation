@@ -6,10 +6,10 @@ import omni.usd
 import omni.replicator.core as rep
 import omni.kit.app
 import carb.events
-from pxr import UsdGeom, Gf
+from pxr import UsdGeom, Gf, Usd
 
 # Set this before exec()-ing, or edit it directly here
-SCHEDULE_PATH = r"rotation_schedule.json"
+SCHEDULE_PATH = r"C:\Users\snook\Desktop\Uni_Stuff\NTNU\Thesis\Isaac-sims\replicator_pieces\rotation_schedule.json"
 
 # Specific to the right USD (blocks_pallet.usd)
 PALLET_BASE = (
@@ -42,8 +42,10 @@ def set_block_rotation(stage, block_idx, angle_degrees):
     if not prim.IsValid():
         print("[pallet_rotate] WARNING: prim not found: " + path)
         return
-    rot_op = get_or_add_rot_op(prim)
-    rot_op.Set(Gf.Vec3f(float(angle_degrees), 0.0, 0.0))  # ZYX: (z, y, x)
+    
+    with Usd.EditContext(stage, stage.GetSessionLayer()):
+        rot_op = get_or_add_rot_op(prim)
+        rot_op.Set(Gf.Vec3f(float(angle_degrees), 0.0, 0.0))  # ZYX: (z, y, x)
 
 def reset_blocks(stage, block_indices):
     #Set a list of blocks back to 0 deg rotation
@@ -83,11 +85,7 @@ def make_frame_callback(schedule, focus_blocks):
     return on_frame
 
 def register_with_replicator(num_frames, callback):
-    #Register the frame trigger and event subscription with Replicator
-    with rep.new_layer():
-        with rep.trigger.on_frame(num_frames=num_frames):
-            rep.utils.send_og_event(event_name="pallet_rotate")
- 
+    #Register event subscription
     subscription = omni.kit.app.get_app().get_message_bus_event_stream()\
         .create_subscription_to_pop_by_type(
             carb.events.type_from_string("pallet_rotate"),
@@ -106,7 +104,7 @@ def log_summary(meta, focus_blocks):
     print("  Focus blocks : " + str(focus_blocks))
     print("  Out of focus : " + str(out_of_focus) + "  (reset to 0 deg at startup)")
 
-def main():
+def setup():
     meta, schedule, focus_blocks = load_schedule(SCHEDULE_PATH)
  
     log_summary(meta, focus_blocks)
@@ -124,4 +122,7 @@ def main():
     global _pallet_sub
     _pallet_sub = register_with_replicator(len(schedule), callback)
  
-    print("\n[pallet_rotate] Registered. Run rep.orchestrator.run() to start.")
+    #print("\n[pallet_rotate] Registered. Run rep.orchestrator.run() to start.")
+
+    return len(schedule)
+
