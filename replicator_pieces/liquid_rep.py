@@ -5,9 +5,9 @@ import asyncio
 import omni.replicator.core as rep
 
 MASK_DIR    = "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/liquid_generation/masks/"
-SHADER_PATH = "/PalletStack/NLP_Pallet_/Looks/LiquidDecalMat/Shader"
+SHADER_PATH = "/PalletStack/TopPalletNLP/Looks/LiquidDecalMat/Shader"
 
-PALLET_PATH = "/PalletStack/NLP_Pallet_04"
+PALLET_PATH = "/PalletStack/TopPalletNLP"
 
 OUTPUT_DIR   = r"C:\Users\snook\Desktop\Uni_Stuff\NTNU\Thesis\SDG_output\block_test"
 RESOLUTION   = (1224, 1048)

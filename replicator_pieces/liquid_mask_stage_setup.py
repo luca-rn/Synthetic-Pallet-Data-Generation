@@ -8,14 +8,15 @@ from pxr import UsdGeom, UsdShade, Usd, Sdf, Gf, Vt
 
 DEFAULTS = {
     "usd_path":    "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/usd_files/plastic_pallet_stack.usd",
-    "pallet_path": "/PalletStack/TopPallet",
+    "pallet_path": "/PalletStack/TopPalletNLP",
     "mask_dir":    "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/liquid_generation/masks/",
 }
 
-MASK_DIR    = "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/liquid_generation/masks/"
-SHADER_PATH = "/PalletStack/TopPallet/Looks/LiquidDecalMat/Shader"
-PALLET_PATH = "/PalletStack/NLP_Pallet_04"
-MTL_PATH:    str = "/PalletStack/TopPallet/Looks/LiquidDecalMat"
+DECAL_PATH:  str = "/PalletStack/TopPalletNLP/LiquidDecal"
+SHADER_PATH = "/PalletStack/TopPalletNLP/Looks/LiquidDecalMat/Shader"
+PALLET_PATH = "/PalletStack/TopPalletNLP"
+PALLET_TO_DEACTIVATE: str = "/PalletStack/TopPalletEPAL"
+MTL_PATH:    str = "/PalletStack/TopPalletNLP/Looks/LiquidDecalMat"
 
 OUTPUT_DIR   = r"C:\Users\snook\Desktop\Uni_Stuff\NTNU\Thesis\SDG_output\block_test"
 RESOLUTION   = (1224, 1048)
@@ -32,7 +33,6 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Pallet SDG Stage Setup")
     parser.add_argument("--usd-path",    type=str,  default=DEFAULTS["usd_path"])
     parser.add_argument("--pallet-path", type=str,  default=DEFAULTS["pallet_path"])
-    parser.add_argument("--gen-liquid",  type=bool, default=True)
     parser.add_argument("--mask-dir",    type=str,  default=DEFAULTS["mask_dir"])
     args, _ = parser.parse_known_args(sys.argv[1:])
     return args
@@ -64,6 +64,23 @@ def apply_semantic_label(stage: Usd.Stage, pallet_path: str) -> None:
         return
     rep.utils._set_semantics_legacy(prim, [("class", "pallet")])
     print(f"[Setup] Semantic label 'pallet' applied to {pallet_path}")
+    
+def configure_top_pallet(stage: Usd.Stage) -> None:
+    """Deactivate TopPalletEpal and activate TopPalletNLP."""
+    epal = stage.GetPrimAtPath(PALLET_TO_DEACTIVATE)
+    if epal.IsValid():
+        epal.SetActive(False)
+        print(f"[Setup] Deactivated  {PALLET_TO_DEACTIVATE}")
+    else:
+        print(f"[Setup] {PALLET_TO_DEACTIVATE} not found — skipping")
+ 
+    nlp = stage.GetPrimAtPath(PALLET_PATH)
+    if nlp.IsValid():
+        nlp.SetActive(True)
+        UsdGeom.Imageable(nlp).MakeVisible()
+        print(f"[Setup] Activated {PALLET_PATH}")
+    else:
+        print(f"[Setup] WARNING: {PALLET_PATH} not found")
 
 def create_decal_plane(stage: Usd.Stage) -> UsdGeom.Mesh:
     """
@@ -132,7 +149,7 @@ def create_liquid_decal_material(stage: Usd.Stage, initial_mask: str) -> None:
     shader.CreateInput("enable_emission",               Sdf.ValueTypeNames.Bool).Set(False)
     shader.CreateInput("emissive_color",                Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(1.0, 0.1, 0.1))
     shader.CreateInput("emissive_intensity",            Sdf.ValueTypeNames.Float).Set(40.0)
-
+ 
     # Mask-driven alpha blend opacity (mode 0 = blend, softer edges than cutout)
     shader.CreateInput("enable_opacity",         Sdf.ValueTypeNames.Bool).Set(True)
     shader.CreateInput("enable_opacity_texture", Sdf.ValueTypeNames.Bool).Set(True)
@@ -140,9 +157,12 @@ def create_liquid_decal_material(stage: Usd.Stage, initial_mask: str) -> None:
     shader.CreateInput("opacity_mode",           Sdf.ValueTypeNames.Int).Set(0)      # 0 = alpha blend
     shader.CreateInput("opacity_threshold",      Sdf.ValueTypeNames.Float).Set(0.96)
     shader.CreateInput("opacity_texture",        Sdf.ValueTypeNames.Asset).Set(Sdf.AssetPath(initial_mask))
-
+ 
     shader.CreateOutput("out", Sdf.ValueTypeNames.Token)
-    material.CreateSurfaceOutput("mdl").ConnectToSource(shader.ConnectableAPI(), "out")
+    # RTX reads mdl:surface/displacement/volume — not the generic surface output
+    material.CreateOutput("mdl:surface",      Sdf.ValueTypeNames.Token).ConnectToSource(shader.ConnectableAPI(), "out")
+    material.CreateOutput("mdl:displacement", Sdf.ValueTypeNames.Token).ConnectToSource(shader.ConnectableAPI(), "out")
+    material.CreateOutput("mdl:volume",       Sdf.ValueTypeNames.Token).ConnectToSource(shader.ConnectableAPI(), "out")
  
     print(f"[Setup] LiquidDecalMat created at {MTL_PATH}")
     print(f"[Setup] Initial opacity texture: {initial_mask}")
@@ -173,11 +193,11 @@ def main() -> None:
     args = parse_args()
  
     stage: Usd.Stage = open_stage(args.usd_path)
+    configure_top_pallet(stage)
     verify_scale(stage)
     apply_semantic_label(stage, args.pallet_path)
  
-    if args.gen_liquid:
-        liquid_decal(stage, args.mask_dir)
+    liquid_decal(stage, args.mask_dir)
  
     # save_stage(args.usd_path) # not gonna save cause overwrites all USDs in chain, annoying
     print(f"[Setup] Done — ready to run replicator script")

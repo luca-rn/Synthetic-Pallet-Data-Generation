@@ -7,14 +7,14 @@ import omni.replicator.core as rep
 MASK_DIR    = "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/liquid_generation/masks/"
 SHADER_PATH = "/scene/Meshes/NLP___Oliviers_Model/Looks/LiquidDecalMat/Shader"
 
-PALLET_PATH = "/PalletStack/NLP_Pallet_04"
+PALLET_PATH = "/scene/Meshes" # Path to the pallet within Isaac Sim - Set up by stage-setup.py
 
 OUTPUT_DIR   = r"C:\Users\snook\Desktop\Uni_Stuff\NTNU\Thesis\SDG_output\block_test"
 RESOLUTION   = (1224, 1048)
 FOCAL_LENGTH = 5.94
 H_APERTURE   = 6.4
-CAMERA_POS   = (-2.4, -3.0, 2.0)
-CAMERA_LOOKAT= (-3.0, 0.072-3.0, 0.0)
+CAMERA_POS   = (1.0, 1.0, 0.0) # need to adjust
+CAMERA_LOOKAT= (0.0, 0.075, 0.0)
 
 NUM_FRAMES = 1
 
