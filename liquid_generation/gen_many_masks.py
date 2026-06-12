@@ -14,22 +14,22 @@ from generate_liquid_mask import generate, DEFAULT_PARAMS
 
 PARAMS = {
     **DEFAULT_PARAMS,
-    "scale":       2.0,
-    "octaves":     3,
-    "persistence": 0.59,
-    "warp":        0.06,
-    "threshold":   0.42,
-    "edge_soft":   0.08,
+    "scale":       6.0,
+    "octaves":     4,
+    "persistence": 0.50,
+    "warp":        0.15,
+    "threshold":   0.49,
+    "edge_soft":   0.06,
     "base_width":  512,
 }
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Batch-generate N liquid mask PNGs.")
-    parser.add_argument("--count",   type=int, default=15,
+    parser.add_argument("--count",   type=int, default=10,
                         help="Number of masks to generate (default: 10)")
     parser.add_argument("--out_dir", default="masks",
                         help="Output directory (default: liquid_masks/)")
-    parser.add_argument("--prefix",  default="liquid_mask_c",
+    parser.add_argument("--prefix",  default="liquid_mask",
                         help="Filename prefix (default: liquid_mask)")
     return parser.parse_args()
 
