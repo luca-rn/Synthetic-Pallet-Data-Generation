@@ -1,4 +1,4 @@
-# Loads a pre-generated rotation schedule (from rotated_blocks.py)
+# Loads a pre-generated rotation schedule (from generate_block_rotations.py)
 # and applies it to pallet blocks each Replicator frame.
 
 import json
