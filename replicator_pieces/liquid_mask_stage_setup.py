@@ -140,10 +140,10 @@ def create_liquid_decal_material(stage: Usd.Stage, initial_mask: str) -> None:
     shader.CreateIdAttr("OmniPBR")
 
     # Liquid appearance (tuned in-scene)
-    shader.CreateInput("diffuse_color_constant",        Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(0.024, 0.042, 0.122))
+    shader.CreateInput("diffuse_color_constant",        Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(0.008, 0.015, 0.045))
     shader.CreateInput("diffuse_tint",                  Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(0.277, 0.245, 0.245))
     shader.CreateInput("albedo_brightness",             Sdf.ValueTypeNames.Float).Set(1.0)
-    shader.CreateInput("reflection_roughness_constant", Sdf.ValueTypeNames.Float).Set(0.58)
+    shader.CreateInput("reflection_roughness_constant", Sdf.ValueTypeNames.Float).Set(0.25)
     shader.CreateInput("metallic_constant",             Sdf.ValueTypeNames.Float).Set(0.0)
     shader.CreateInput("specular_level",                Sdf.ValueTypeNames.Float).Set(1.0)
     shader.CreateInput("enable_emission",               Sdf.ValueTypeNames.Bool).Set(False)
