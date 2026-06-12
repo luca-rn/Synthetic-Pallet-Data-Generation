@@ -12,7 +12,7 @@ PALLET_PATH = "/PalletStack/TopPalletNLP"
 WAREHOUSE_LIGHT = "/Root/RectLight_02" # Only randomizing the one above the pallet
 #the other has little impact, need to change path if pallets moved to other side of warehouse
 
-OUTPUT_DIR   = r"C:\Users\snook\Desktop\Uni_Stuff\NTNU\Thesis\SDG_output\contam_training_data"
+OUTPUT_DIR   = r"C:\Users\snook\Desktop\Uni_Stuff\NTNU\Thesis\SDG_output\water_test"
 
 NUM_FRAMES = 10
 
@@ -48,9 +48,14 @@ SPOT_2_ROT_MAX = (-15, 10, 0)
 
 # Contaminant Characteristics 
 MIN_DIFF_COLOUR = (0.005, 0.010, 0.030)
-MAX_DIFF_COLOUR = (0.030, 0.035, 0.070)
+MAX_DIFF_COLOUR = (0.080, 0.060, 0.020)
 ROUGHNESS_MIN = 0.15
 ROUGHNESS_MAX = 0.4
+
+# If using more colours for contam
+COLOURFUL = True
+COLOURFUL_LOW = (0.002, 0.002, 0.002)
+COLOURFUL_HIGH = (0.35, 0.35, 0.35)
 
 def establish_masks(mask_dir: str) -> List[str]:
     """Glob all liquid_mask_*.png files from mask_dir. Exits if none found."""
@@ -103,8 +108,11 @@ def randomize_decal(shader, mask_paths: List[str]) -> None:
     with shader:
         rep.modify.attribute("inputs:opacity_texture",
             rep.distribution.choice(mask_paths))
-        rep.modify.attribute("inputs:diffuse_color_constant",
-            rep.distribution.uniform(MIN_DIFF_COLOUR, MAX_DIFF_COLOUR))
+        if COLOURFUL:
+            rep.modify.attribute("inputs:diffuse_color_constant", rep.distribution.uniform(COLOURFUL_LOW, COLOURFUL_HIGH))
+        else:
+            rep.modify.attribute("inputs:diffuse_color_constant",
+                rep.distribution.uniform(MIN_DIFF_COLOUR, MAX_DIFF_COLOUR))
         rep.modify.attribute("inputs:reflection_roughness_constant",
             rep.distribution.uniform(ROUGHNESS_MIN, ROUGHNESS_MAX))
 
