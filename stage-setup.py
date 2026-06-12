@@ -29,10 +29,6 @@ DEFAULTS = {
 
 DECAL_PATH: str = "/scene/Meshes/NLP___Oliviers_Model/LiquidDecal"
 MTL_PATH: str = "/scene/Meshes/NLP___Oliviers_Model/Looks/LiquidDecalMat"
-PALLET_X    = 0.5999   # half-width of pallet top surface
-PALLET_Y    = 0.3999   # half-depth of pallet top surface
-DECAL_Y     = 0.152    # just above pallet top
-
  
 def parse_args() -> argparse.Namespace:
     #Parse CLI arguments, falling back to defaults if not provided

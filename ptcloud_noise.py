@@ -29,11 +29,11 @@ from scipy.ndimage import sobel, binary_dilation
 # CONFIG — Noise Parameters
 # ---------------------------------------------------------------------------
 
-GAUSSIAN_SIGMA: float   = 0.00055   # metres (~0.55mm std, M70 point precision)
+GAUSSIAN_SIGMA: float   = 0.00055   # metres (~0.55mm std, M70 point precision is 0.055mm but is not effective enough)
 
 EDGE_THRESHOLD: float   = 0.05      # normalised gradient to classify as edge
 EDGE_DILATION: int      = 1         # pixels to dilate edge mask
-EDGE_NOISE_SIGMA: float = 0.0001      # metres — flying pixel displacement (1mm std)
+EDGE_NOISE_SIGMA: float = 0.0001      # metres — flying pixel displacement (0.1mm std)
 EDGE_COLOR_SIGMA: float = 5.0      # uint8 — colour bleeding std at edges
 
 DROPOUT_RATE: float     = 0.005     # fraction of points to remove (0.5%)

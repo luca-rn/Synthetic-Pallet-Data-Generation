@@ -14,39 +14,34 @@ Output:
     liquid_mask.png  — RGBA PNG
 """
 
+import argparse
+import json
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image
+import os
 
 
 # ─────────────────────────────────────────────
-# PARAMETERS — tune these (use the HTML tester)
+# PARAMETERS — tune these (use the test_liquid_mask.html to check)
 # ─────────────────────────────────────────────
 
-PARAMS = {
-    "scale":       4.0,    # noise zoom — lower = one big puddle, higher = many droplets
-    "octaves":     3,         # detail layers — more = rougher edges
-    "persistence": 0.59,      # amplitude decay per octave — higher = more texture within liquid
-    "warp":        0.3,       # domain warp strength — higher = more torn/tendrilly edges
-    "threshold":   0.49,     # liquid coverage — lower = less liquid, higher = more flooded
-    "edge_soft":   0.04,      # edge feather width — 0 = hard mask, higher = translucent fringe
-    "color":       (255, 255, 255),   # RGB of the liquid (use (10,10,10) for ink/oil, (26,74,42) for slime)
-    "seed":        None,      # int for reproducibility, None for random
-    "offset_x":   None,       # float noise offset X — None = random, set to reproduce exact shape
-    "offset_y":   None,       # float noise offset Y — None = random, set to reproduce exact shape
-    
-    # ── Pallet surface ─────────────────────────────────────────────────
-    # Bounds of the pallet top surface in local space (X, Y).
-    # Output PNG width/height are derived from these so the texture maps
-    # 1-to-1 onto the decal plane with no stretching.
-    # Update these if you swap the pallet model.
-    "pallet_x_min":     -0.5999,
-    "pallet_x_max":      0.5999,
-    "pallet_y_min":     -0.3999,
-    "pallet_y_max":      0.3999,
-    "pallet_mask_png":   "pallet_solid_mask.png",      # path to mask PNG; None = look for pallet_solid_mask.png next to this script
-    "base_width":        512,       # output width in px; height auto-derived from aspect ratio
-    
-    "output":     "liquid_mask_1.png",
+DEFAULT_PARAMS = {
+    "scale":           4.0,
+    "octaves":         3,
+    "persistence":     0.59,
+    "warp":            0.3,
+    "threshold":       0.49,
+    "edge_soft":       0.04,
+    "color":           (255, 255, 255),
+    "seed":            None,
+    "offset_x":        None,
+    "offset_y":        None,
+    "pallet_x_min":   -0.5999,
+    "pallet_x_max":    0.5999,
+    "pallet_y_min":   -0.3999,
+    "pallet_y_max":    0.3999,
+    "pallet_mask_png": "pallet_solid_mask.png",
+    "base_width":      512,
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -125,7 +120,6 @@ def build_pallet_mask(params: dict, W: int, H: int) -> np.ndarray:
  
     Returns a uint8 numpy array (H, W): 255 = solid surface, 0 = hole/background.
     """
-    import os
     mask_path = params.get("pallet_mask_png")
     if not mask_path:
         mask_path = os.path.join(
@@ -139,7 +133,7 @@ def build_pallet_mask(params: dict, W: int, H: int) -> np.ndarray:
     mask = Image.open(mask_path).convert("L").resize((W, H), Image.LANCZOS)
     return np.array(mask)
 
-def generate(params: dict) -> Image.Image:
+def generate(params: dict,  output: str) -> Image.Image:
     # Derive W×H from pallet aspect ratio so texture maps 1-to-1, no stretching
     pallet_w = params["pallet_x_max"] - params["pallet_x_min"]
     pallet_h = params["pallet_y_max"] - params["pallet_y_min"]
@@ -204,34 +198,51 @@ def generate(params: dict) -> Image.Image:
         alpha,
     ], axis=-1)
 
-    return Image.fromarray(rgba, mode="RGBA")
+    img = Image.fromarray(rgba, mode="RGBA")
+    img.save(output)
+    return img
 
-
-def print_coverage(img: Image.Image) -> None:
-    a = np.array(img)[:, :, 3]
-    liquid = (a == 255).sum()
-    total = a.size
-    pct = liquid / total * 100
-    print(f"Coverage: {pct:.1f}%  ({liquid:,} / {total:,} px)")
-    if pct < 5:
-        print("  → Too sparse — raise threshold")
-    elif pct < 15:
-        print("  → Small splash — looks like a droplet cluster")
-    elif pct <= 60:
-        print("  → Realistic splash coverage")
-    elif pct <= 75:
-        print("  → Large flood — lower threshold to reduce")
-    else:
-        print("  → Too flooded — lower threshold significantly")
-
+def _parse_args():
+    parser = argparse.ArgumentParser(description="Generate a liquid mask PNG.")
+    parser.add_argument("--output", default="liquid_mask.png",
+                        help="Output file path (default: liquid_mask.png)")
+    parser.add_argument("--params", default=None,
+                        help="JSON string or path to a JSON file of param overrides")
+    # Individual param overrides
+    parser.add_argument("--scale",       type=float)
+    parser.add_argument("--octaves",     type=int)
+    parser.add_argument("--persistence", type=float)
+    parser.add_argument("--warp",        type=float)
+    parser.add_argument("--threshold",   type=float)
+    parser.add_argument("--edge_soft",   type=float)
+    parser.add_argument("--seed",        type=int)
+    parser.add_argument("--base_width",  type=int)
+    return parser.parse_args()
 
 if __name__ == "__main__":
-    img = generate(PARAMS)
-    img.save(PARAMS["output"])
-    print(f"Saved → {PARAMS['output']}  ({img.width}×{img.height})")
-    print_coverage(img)
-    print()
-    print("Parameters used:")
-    for k, v in PARAMS.items():
-        if k != "output":
-            print(f"  {k:<20} = {v}")
+    args = _parse_args()
+ 
+    # Start from defaults
+    params = dict(DEFAULT_PARAMS)
+ 
+    # Apply JSON overrides if provided
+    if args.params:
+        if os.path.isfile(args.params):
+            with open(args.params) as f:
+                overrides = json.load(f)
+        else:
+            overrides = json.loads(args.params)
+        params.update(overrides)
+ 
+    # Apply individual CLI overrides
+    for key in ("scale", "octaves", "persistence", "warp",
+                "threshold", "edge_soft", "seed", "base_width"):
+        val = getattr(args, key)
+        if val is not None:
+            params[key] = val
+
+    output = args.output
+ 
+    print(f"Generating → {output}")
+    img = generate(params, output)
+    print(f"Saved → {output}  ({img.width}×{img.height})")

@@ -310,8 +310,8 @@ def attach_writer(render_product: HydraTexture, output_dir: str) -> Writer:
         instance_segmentation=False,
         semantic_segmentation=False,
         distance_to_camera=False,
-        #pointcloud=True,
-        #pointcloud_include_unlabelled=False,
+        pointcloud=False,
+        pointcloud_include_unlabelled=False,
         normals=False,
         camera_params=False,
     )

@@ -1,8 +1,8 @@
 import numpy as np
 import open3d as o3d
 
-pts  = np.load("C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/ptcloud_examples/pointcloud_noisy_0000.npy")
-rgba = np.load("C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/ptcloud_examples/pointcloud_noisy_0000_rgb.npy")
+pts  = np.load("C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/ptcloud_examples/pointcloud_noisy_0001.npy")
+rgba = np.load("C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/ptcloud_examples/pointcloud_noisy_0001_rgb.npy")
 
 pcd = o3d.geometry.PointCloud()
 pcd.points = o3d.utility.Vector3dVector(pts)

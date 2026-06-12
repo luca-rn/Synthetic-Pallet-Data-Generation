@@ -11,9 +11,9 @@ from pxr import UsdGeom, Gf, Usd
 # Set this before exec()-ing, or edit it directly here
 SCHEDULE_PATH = r"C:\Users\snook\Desktop\Uni_Stuff\NTNU\Thesis\Isaac-sims\replicator_pieces\rotation_schedule.json"
 
-# Specific to the right USD (blocks_pallet.usd)
+# Specific to the right USD (pallet_stack.usd)
 PALLET_BASE = (
-    "/scene/Meshes/Sketchfab_model"
+    "/PalletStack/TopPalletEPAL/scene/Meshes/Sketchfab_model"
     "/_53432bb09b84172864175516b644c7a_fbx"
     "/RootNode/Pallet_Blocks/Block_"
 )

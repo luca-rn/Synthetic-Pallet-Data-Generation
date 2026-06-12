@@ -7,7 +7,7 @@ from pxr import Usd, UsdGeom, Gf
 SCHEDULE_PATH = r"C:\Users\snook\Desktop\Uni_Stuff\NTNU\Thesis\Isaac-sims\replicator_pieces\rotation_schedule.json"
 
 PALLET_BASE = (
-    "/scene/Meshes/Sketchfab_model"
+    "/PalletStack/TopPalletEPAL/scene/Meshes/Sketchfab_model"
     "/_53432bb09b84172864175516b644c7a_fbx"
     "/RootNode/Pallet_Blocks/Block_"
 )
@@ -64,16 +64,20 @@ with rep.new_layer():
     )
     writer.attach([render_product])
  
-    # Per-frame rotation — one rep.randomizer call per focus block,
+    # Per-frame rotation — one rep.randomizer call per focus block
     # each driven by a sequence that advances one step per frame
+    # focus blocks are those in view of camera, other blocks are skipped
     with rep.trigger.on_frame(max_execs=num_frames+1):
         for block_idx in focus_blocks:
+            # prim path to each block in isaac sim
             prim_path = PALLET_BASE + str(block_idx)
             block_prim = rep.get.prim_at_path(prim_path)
             with block_prim:
+                # modify block rotation (around centerpoints), no translation applied
                 rep.modify.pose(
                     rotation=rep.distribution.sequence(
                         # sequence of (x, y, z) rotation tuples — only Z varies
+                        # sequence extracted from rotation_schedule
                         [(0.0, 0.0, a) for a in angle_sequences[block_idx]]
                     )
                 )

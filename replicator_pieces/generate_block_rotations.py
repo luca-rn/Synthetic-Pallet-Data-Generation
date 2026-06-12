@@ -44,9 +44,8 @@ RANGES = {
 }
 
 WEIBULL_K = 0.8 # Higher k puts distribution peak further towards higher range. 
-                # K<1 creates spike at 9, K=1 is exponential from 9, K>1 creates hump
+                # K<1 creates spike then exponential style drop, K=1 is exponential, K>1 creates hump
 WEIBULL_LAMBDA = 70 # Lower lambda means less higher range cases
-
 
 def weibull_sample(low, high):
     while True:

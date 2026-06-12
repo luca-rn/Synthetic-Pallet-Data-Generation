@@ -20,7 +20,7 @@ import shutil
 import sys
 
 DEST : str = "D:\ThesisData\single_cam"
-SOURCE : str = "D:\ThesisData\sort_agder"
+SOURCE : str = "D:\ThesisData\sort_hedmark"
 
 
 def count_items(folder_path: str) -> int:
@@ -111,11 +111,11 @@ def main():
         description="Move subfolders with N or fewer items to a destination folder."
     )
     parser.add_argument("source", type=str, default = SOURCE, help="Path to the folder to scan")
-    parser.add_argument("destination", type = str,default = DEST, help="Path to move matching subfolders into")
+    parser.add_argument("destination", type = str, default = DEST, help="Path to move matching subfolders into")
     parser.add_argument(
         "--threshold", "-t",
         type=int,
-        default=4,
+        default=7,
         help="Maximum number of items a subfolder may contain to be moved (default: 4)",
     )
     parser.add_argument(
