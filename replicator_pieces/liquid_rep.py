@@ -14,7 +14,7 @@ WAREHOUSE_LIGHT = "/Root/RectLight_02" # Only randomizing the one above the pall
 
 OUTPUT_DIR   = r"C:\Users\snook\Desktop\Uni_Stuff\NTNU\Thesis\SDG_output\water_test"
 
-NUM_FRAMES = 10
+NUM_FRAMES = 100
 
 # Camera Settings and Pose
 RESOLUTION   = (1224, 1048)
@@ -26,20 +26,20 @@ CAMERA_POS    = (-5.0, -1.5, 1.8)
 # For randomizing camera on both sides of the pallet
 CAMERA_POSITIONS = [
     (-5.0, -1.5, 1.8),   # side a, centre
-    (-5.2, -1.4, 1.9),   # side a, left
-    (-4.8, -1.4, 1.9),   # side a, right
+    (-5.1, -1.4, 1.9),   # side a, left
+    (-4.9, -1.4, 1.9),   # side a, right
     (-5.0, -1.6, 1.7),   # side a, low
     (-5.0,  1.5, 1.8),   # side b, centre
-    (-5.2,  1.4, 1.9),   # side b, left
-    (-4.8,  1.4, 1.9),   # side b, right
+    (-5.1, 1.4, 1.9),   # side b, left
+    (-4.9, 1.4, 1.9),   # side b, right
     (-5.0,  1.6, 1.7),   # side b, low
 ]
 
 # Max and minimum intensities for light randomization
-WARE_LIGHT_MIN = 3000
-WARE_LIGHT_MAX = 7000
-SPOTLIGHT_MIN = 500
-SPOTLIGHT_MAX = 2000
+WARE_LIGHT_MIN = 1000
+WARE_LIGHT_MAX = 6000
+SPOTLIGHT_MIN = 40
+SPOTLIGHT_MAX = 1000
 
 # Light colour range
 LIGHT_COLOUR_MIN = (0.875,0.845,0.675)
