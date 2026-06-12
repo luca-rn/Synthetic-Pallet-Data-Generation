@@ -22,8 +22,18 @@ FOCAL_LENGTH = 5.94
 H_APERTURE   = 6.4
 CAMERA_LOOKAT = (-5.0, 0.0, 1.0) 
 CAMERA_POS    = (-5.0, -1.5, 1.8)
-CAM_POS_MIN = (-5.1, -1.6, 1.75)
-CAM_POS_MAX = (-4.9, -1.4, 1.85)
+
+# For randomizing camera on both sides of the pallet
+CAMERA_POSITIONS = [
+    (-5.0, -1.5, 1.8),   # side a, centre
+    (-5.2, -1.4, 1.9),   # side a, left
+    (-4.8, -1.4, 1.9),   # side a, right
+    (-5.0, -1.6, 1.7),   # side a, low
+    (-5.0,  1.5, 1.8),   # side b, centre
+    (-5.2,  1.4, 1.9),   # side b, left
+    (-4.8,  1.4, 1.9),   # side b, right
+    (-5.0,  1.6, 1.7),   # side b, low
+]
 
 # Max and minimum intensities for light randomization
 WARE_LIGHT_MIN = 3000
@@ -119,8 +129,10 @@ def randomize_decal(shader, mask_paths: List[str]) -> None:
 # Small position changes in camera        
 def randomize_camera(camera) -> None:
     with camera:
-        rep.modify.pose(position=rep.distribution.uniform((CAM_POS_MIN),(CAM_POS_MAX)),
-                        look_at=CAMERA_LOOKAT)
+        rep.modify.pose(
+            position=rep.distribution.choice(CAMERA_POSITIONS),
+            look_at=CAMERA_LOOKAT
+        )
 
 with rep.new_layer():
  
