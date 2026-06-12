@@ -4,3 +4,10 @@ liquid_generation/liquid_mask.png
 liquid_generation/masks/
 liquid_generation/pallet_temp.usd
 liquid_generation/pallet_water_viewer.html
+databank/
+ptcloud_examples/pointcloud_noisy_0001.npy
+ptcloud_examples/pointcloud_noisy_0001_rgb.npy
+usd_files/plastic_pallet_stack - Copy.usd
+usd_files/plastic_pallet_stack.usd
+usd_files/separate_blocks.usd
+usd_files/blocks_pallet.usd
