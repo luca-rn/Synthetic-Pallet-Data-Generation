@@ -11,9 +11,12 @@ pandas
 scikit-learn
 ultralytics
 
+# CUDA is important for model training if applicable
+
 # Bundled with NVIDIA Isaac Sim and not available via pip:
 # omni.replicator.core
 # omni.usd
 # omni.kit.app
 # pxr (OpenUSD)
 # Run replicator.py and stage-setup.py inside the Isaac Sim Python environment
+
