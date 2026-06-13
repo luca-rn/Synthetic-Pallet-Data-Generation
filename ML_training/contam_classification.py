@@ -2,10 +2,10 @@ import os, shutil, zipfile
 from pathlib import Path
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
-DATASET_ZIP  = r'"C:\Users\snook\Desktop\Uni_Stuff\NTNU\Thesis\Isaac-sims\databank\contam\real_training_data.zip'
-DATASET_DIR  = r'C:\Users\snook\Desktop\Uni_Stuff\NTNU\Thesis\Isaac-sims\databank\contam\real_training_data'
-RUNS_DIR     = r'C:\Users\snook\Desktop\Uni_Stuff\NTNU\Thesis\Training Results\Contamination\Real-Data\runs'
-DRIVE_OUTPUT = r'C:\Users\snook\Desktop\Uni_Stuff\NTNU\Thesis\Training Results\Contamination\Real-Data\results'
+DATASET_ZIP  = r'"C:\Users\snook\Desktop\Uni_Stuff\NTNU\Thesis\Isaac-sims\databank\contam\synth_training_data.zip'
+DATASET_DIR  = r'C:\Users\snook\Desktop\Uni_Stuff\NTNU\Thesis\Isaac-sims\databank\contam\synth_training_data'
+RUNS_DIR     = r'C:\Users\snook\Desktop\Uni_Stuff\NTNU\Thesis\Isaac-sims\training_results\Contamination\Real-Data\runs'
+DRIVE_OUTPUT = r'C:\Users\snook\Desktop\Uni_Stuff\NTNU\Thesis\Isaac-sims\training_results\Contamination\Real-Data\results'
 EPOCHS       = 100
 IMG_SIZE     = 224
 BATCH        = 16
@@ -14,7 +14,7 @@ MODEL_11     = 'yolo11s'
 MODEL_26     = 'yolo26s'
 COLORS       = {MODEL_11: '#4C72B0', MODEL_26: '#DD8452'}
 CLEAR_RUNS   = False
-SKIP_TRAINING = False
+SKIP_TRAINING = True
 
 def setup_dataset(dataset_zip, dataset_dir):
     """Extract dataset if needed and print image counts per split/class."""
