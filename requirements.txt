@@ -3,6 +3,7 @@ scipy
 open3d
 pillow
 opencv-python
+openpyxl
 tqdm
 albumentations
 matplotlib

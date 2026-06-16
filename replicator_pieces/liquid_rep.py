@@ -1,10 +1,12 @@
 import glob, sys
+from pathlib import Path
 from typing import List
 import asyncio
- 
+
 import omni.replicator.core as rep
 
-MASK_DIR    = "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/liquid_generation/masks/"
+_REPO_ROOT  = Path(__file__).parent.parent.resolve()
+MASK_DIR    = str(_REPO_ROOT / "liquid_generation" / "masks")
 SHADER_PATH = "/PalletStack/TopPalletNLP/Looks/LiquidDecalMat/Shader"
 
 PALLET_PATH = "/PalletStack/TopPalletNLP"
@@ -12,7 +14,7 @@ PALLET_PATH = "/PalletStack/TopPalletNLP"
 WAREHOUSE_LIGHT = "/Root/RectLight_02" # Only randomizing the one above the pallet
 #the other has little impact, need to change path if pallets moved to other side of warehouse
 
-OUTPUT_DIR   = r"C:\Users\snook\Desktop\Uni_Stuff\NTNU\Thesis\SDG_output\water_test"
+OUTPUT_DIR   = str(_REPO_ROOT.parent / "SDG_output" / "water_test")
 
 NUM_FRAMES = 100
 
@@ -36,10 +38,10 @@ CAMERA_POSITIONS = [
 ]
 
 # Max and minimum intensities for light randomization
-WARE_LIGHT_MIN = 1000
-WARE_LIGHT_MAX = 6000
-SPOTLIGHT_MIN = 40
-SPOTLIGHT_MAX = 1000
+WARE_LIGHT_MIN = 500
+WARE_LIGHT_MAX = 8000
+SPOTLIGHT_MIN = 20
+SPOTLIGHT_MAX = 2000
 
 # Light colour range
 LIGHT_COLOUR_MIN = (0.875,0.845,0.675)
@@ -162,6 +164,7 @@ with rep.new_layer():
         rgb                   = True,
         bounding_box_2d_tight = False,
         semantic_segmentation = False,
+        semantic_filter_predicate="class:focus_pallet",
     )
     writer.attach([render_product])
  

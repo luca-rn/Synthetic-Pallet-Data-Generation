@@ -1,8 +1,10 @@
+from pathlib import Path
 import numpy as np
 import open3d as o3d
 
-pts  = np.load("C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/ptcloud_examples/pointcloud_noisy_0001.npy")
-rgba = np.load("C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/ptcloud_examples/pointcloud_noisy_0001_rgb.npy")
+_PTCLOUD_DIR = Path(__file__).parent.parent / "ptcloud_examples"
+pts  = np.load(_PTCLOUD_DIR / "pointcloud_noisy_0001.npy")
+rgba = np.load(_PTCLOUD_DIR / "pointcloud_noisy_0001_rgb.npy")
 
 pcd = o3d.geometry.PointCloud()
 pcd.points = o3d.utility.Vector3dVector(pts)

@@ -1,15 +1,16 @@
 # Sets up the Replicator render pipeline and runs it
 
-# Just for using in isaac sim - to find pallet rotate
 import sys
-sys.path.append(r"C:\Users\snook\Desktop\Uni_Stuff\NTNU\Thesis\Isaac-sims\replicator_pieces")
+from pathlib import Path
+
+_REPO_ROOT = Path(__file__).parent.parent.resolve()
+sys.path.append(str(Path(__file__).parent))
 
 import omni.replicator.core as rep
 import rep_rotate
 import asyncio
 
-# Set these before exec()-ing, or edit directly here
-OUTPUT_DIR   = r"C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/SDG_output/block_test"
+OUTPUT_DIR = str(_REPO_ROOT.parent / "SDG_output" / "block_test")
 
 RESOLUTION      = (1224, 1048)
 FOCAL_LENGTH    = 5.94

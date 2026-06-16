@@ -1,15 +1,17 @@
 import glob, sys
+from pathlib import Path
 from typing import List
 import asyncio
- 
+
 import omni.replicator.core as rep
 
-MASK_DIR    = "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/liquid_generation/masks/"
+_REPO_ROOT  = Path(__file__).parent.parent.resolve()
+MASK_DIR    = str(_REPO_ROOT / "liquid_generation" / "masks")
 SHADER_PATH = "/scene/Meshes/NLP___Oliviers_Model/Looks/LiquidDecalMat/Shader"
 
 PALLET_PATH = "/scene/Meshes" # Path to the pallet within Isaac Sim - Set up by stage-setup.py
 
-OUTPUT_DIR   = r"C:\Users\snook\Desktop\Uni_Stuff\NTNU\Thesis\SDG_output\block_test"
+OUTPUT_DIR   = str(_REPO_ROOT.parent / "SDG_output" / "block_test")
 RESOLUTION   = (1224, 1048)
 FOCAL_LENGTH = 5.94
 H_APERTURE   = 6.4

@@ -10,7 +10,9 @@ ptcloud_examples/pointcloud_noisy_0001_rgb.npy
 usd_files/plastic_pallet_stack - Copy.usd
 usd_files/plastic_pallet_stack.usd
 usd_files/separate_blocks.usd
+usd_files/separate_blocks - Copy.usd
 usd_files/blocks_pallet.usd
+usd_files/warehouse_nlp.usd
 training_results/
 yolo11s-cls.pt
 yolo26n.pt

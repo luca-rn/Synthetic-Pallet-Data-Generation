@@ -1,436 +1,740 @@
 """
-replicator_script_1.py — Pallet Synthetic Data Generation
-Run after stage_setup.py
+replicator.py — Pallet Synthetic Data Generation (PalletStack)
 
-GUI usage - run in Isaac Sim Script Editor.
+Unified replicator combining liquid-contaminant decal randomisation and
+schedule-driven block rotation for the ``pallet_stack.usd`` scene.
 
-Headless usage:
-    ./isaac-sim.headless.bat --/omni/replicator/script="replicator.py"
-        --output-dir "C:/my_output"
-        --num-frames 500
-        --cam-dist-min 1.3
-        --cam-dist-max 2.3
-        --textures "/path/to/textures/*"
+Headless
+--------
+    ./isaac-sim.headless.bat \\
+        --/omni/replicator/script="replicator.py" \\
+        -- \\
+        --pallet-type epal \\
+        --num-frames 500 \\
+        --output-dir "C:/my_output" \\
+        --gen-liquid \\
+        --rotation-schedule "rotation_schedule.json"
+
+GUI
+---
+    Run in the Isaac Sim Script Editor (uses defaults).
 """
-import argparse, math, random, sys, os
-import asyncio, carb, glob
-from typing import List, Tuple
+
+from __future__ import annotations
+
+import argparse
+import asyncio
 import datetime
+import glob
+import json
+import os
+import random
+import sys
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Sequence, Tuple
 
-import omni.hydra.engine.stats as hstats
-import omni.kit.app
+import carb
 import omni.replicator.core as rep
-from omni.replicator.core import Writer
-from omni.replicator.core.scripts.utils.viewport_manager import HydraTexture
+import omni.usd
+from pathlib import Path
+from pxr import Usd
 
+# ---------------------------------------------------------------------------
+# Type aliases
+# ---------------------------------------------------------------------------
+Vec3  = Tuple[float, float, float]
+Vec3i = Tuple[int, int, int]
 
-print("Running replicator script...")
+# ---------------------------------------------------------------------------
+# PalletStack prim paths  (must match stage_setup.py)
+# ---------------------------------------------------------------------------
 
-# Config
+ACCEPTED_PALLET_TYPES: List[str] = ["epal", "nlp"]
 
-DEFAULTS = {
-    "pallet_path":  "/scene/Meshes", # Path to the pallet within Isaac Sim - Set up by stage-setup.py
-    "output_dir":   "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/SDG_output",
-    # Liquid Decals
-    "mask_dir" : "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/liquid_generation/masks/",
-    "shader_path" : "/scene/Meshes/NLP___Oliviers_Model/Looks/LiquidDecalMat/Shader",
-
-    "num_frames":   5, # Set low to avoid accidental large runs
-    # How close to pallet
-    "cam_dist_min": 1.3,
-    "cam_dist_max": 2.3,
-    # degrees above base plane
-    "cam_elev_min": 15.0,
-    "cam_elev_max": 35.0,
-    # Light randomization limits
-    "key_int_min":  3000.0,
-    "key_int_max":  8000.0,
-    "fill_int_min": 300.0,
-    "fill_int_max": 800.0,
-    "dome_int_min": 300.0,
-    "dome_int_max": 800.0,
-    
-    # Block rotation limits (degrees, applied around Z/vertical axis)
-    "block_rot_max": 90.0,
-    # Number of blocks rotated (0-9)
-    "num_block_rot": 1,
-    "num_blocks_hidden": 0,  # 0 = all blocks visible
+PALLET_PRIM_PATHS: Dict[str, str] = {
+    "epal": "/PalletStack/TopPalletEPAL",
+    "nlp":  "/PalletStack/TopPalletNLP",
 }
 
-USE_PATH_TRACING = False  # false for real-time
-SPP = 32
-TOTAL_SPP = 64
+BLOCK_BASE_PATH: str = (
+    "/PalletStack/TopPalletEPAL/scene/Meshes/Sketchfab_model"
+    "/_53432bb09b84172864175516b644c7a_fbx"
+    "/RootNode/Pallet_Blocks/Block_"
+)
 
-ACCEPTED_PALLET_TYPES: List[str] = ["epal","nlp"]
+DECAL_SHADER_PATH: str = (
+    "/PalletStack/TopPalletNLP/Looks/LiquidDecalMat/Shader"
+)
 
-TEXTURES: List[str] = [#"C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/textures/plywood_diff_4k.jpg",
-       "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/textures/Material_003_baseColor.jpg"
-        #"C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/textures/Texturelabs_Wood_266L.jpg",
-       # "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/textures/Texturelabs_Wood_267L.jpg",
-        #"C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/textures/Texturelabs_Wood_268L.jpg"
-        ]
+# Existing warehouse light already in pallet_stack.usd
+WAREHOUSE_LIGHT_PATH: str = "/Root/RectLight_02"
 
-# Camera intrinsics - need to match to real camera later
-#RESOLUTION: Tuple[int, int]      = (2448, 2048)    # Zivid 2 M70 resolution
-RESOLUTION: Tuple[int, int]      = (1224, 1048)  # Zivid 2 M70 resolution
-FOCAL_LENGTH: float    = 5.94            # mm, derived from FOV
-H_APERTURE: float     = 6.4             # mm, 1/2" sensor
+TOTAL_BLOCKS: int = 9
 
-PALLET_CENTRE: dict[str, Tuple[float, float, float]] = {
-    "epal": (0.0, 0.072, 0.0),
-    "nlp":  (0.0, 0.075, 0.0),
-}
-PALLET_ROTATIONS: List[Tuple[int, int, int]]  = [(0,0,0), (0,90,0), (0,180,0), (0,270,0)]
+# ---------------------------------------------------------------------------
+# Camera defaults (tuned for the PalletStack warehouse scene)
+# ---------------------------------------------------------------------------
 
-# Pallet_Blocks prim paths - Block_0 through Block_8
-BLOCK_PATHS: List[str] = [
-    "/scene/Meshes/Sketchfab_model/_53432bb09b84172864175516b644c7a_fbx/RootNode/Pallet_Blocks/Block_{}".format(i)
-    for i in range(9)
+# The pallet sits near world (-5, 0, 1) in the warehouse
+CAMERA_LOOKAT: Vec3 = (-5.0, 0.0, 1.0)
+
+# Eight hand-tuned viewpoints covering both sides of the pallet
+DEFAULT_CAMERA_POSITIONS: List[Vec3] = [
+    (-5.0, -1.5, 1.8),   # side A, centre
+    (-5.1, -1.4, 1.9),   # side A, left
+    (-4.9, -1.4, 1.9),   # side A, right
+    (-5.0, -1.6, 1.7),   # side A, low
+    (-5.0,  1.5, 1.8),   # side B, centre
+    (-5.1,  1.4, 1.9),   # side B, left
+    (-4.9,  1.4, 1.9),   # side B, right
+    (-5.0,  1.6, 1.7),   # side B, low
 ]
 
-def parse_args() -> argparse.Namespace:
-    """Parse CLI arguments, falling back to defaults if not provided."""
-    parser = argparse.ArgumentParser(description="Pallet SDG Replicator")
-    parser.add_argument("--pallet-type",  type=str, default="epal")
-    parser.add_argument("--output-dir",   type=str,   default=DEFAULTS["output_dir"])
-    parser.add_argument("--num-frames",   type=int,   default=DEFAULTS["num_frames"],
-                        help="Number of frames for replicator to generate")
-    parser.add_argument("--pallet-path",  type=str,   default=DEFAULTS["pallet_path"],
-                        help="Path to the pallet within Isaac Sim (Default: /scene/Meshes)")
-    
-    # NLP - Contamination
-    parser.add_argument("--gen-liquid", type=int, default=None)
-    #parser.add_argument("--gen-liquid", action="store_true", default=False)
-    parser.add_argument("--mask-dir",     type=str, default=DEFAULTS["mask_dir"],
-                        help="Path to masks for NLP pal contaminants")
-    parser.add_argument("--shader-path",  type=str,   default=DEFAULTS["shader_path"],
-                        help="Path to shader for NLP pallet (in sim)")
-    
-    #Lights and Camera Variables
-    parser.add_argument("--cam-dist-min", type=float, default=DEFAULTS["cam_dist_min"])
-    parser.add_argument("--cam-dist-max", type=float, default=DEFAULTS["cam_dist_max"])
-    parser.add_argument("--cam-elev-min", type=float, default=DEFAULTS["cam_elev_min"])
-    parser.add_argument("--cam-elev-max", type=float, default=DEFAULTS["cam_elev_max"])
-    parser.add_argument("--key-int-min",  type=float, default=DEFAULTS["key_int_min"])
-    parser.add_argument("--key-int-max",  type=float, default=DEFAULTS["key_int_max"])
-    parser.add_argument("--fill-int-min", type=float, default=DEFAULTS["fill_int_min"])
-    parser.add_argument("--fill-int-max", type=float, default=DEFAULTS["fill_int_max"])
-    parser.add_argument("--dome-int-min", type=float, default=DEFAULTS["dome_int_min"])
-    parser.add_argument("--dome-int-max", type=float, default=DEFAULTS["dome_int_max"])
+PALLET_ROTATIONS: List[Vec3i] = [
+    (0, 0, 0), (0, 90, 0), (0, 180, 0), (0, 270, 0),
+]
 
-    parser.add_argument("--textures",     type=str)
-    # Block rotation args
-    parser.add_argument("--block-rot-max",  type=float, default=DEFAULTS["block_rot_max"],
-                        help="Max twist angle per block in degrees (default: 90)")
-    parser.add_argument("--num-block-rot", type=int, default=DEFAULTS["num_block_rot"],
-                        help="Probability each block is rotated each frame (default: 1)")
-    parser.add_argument("--no-block-rot",   action="store_true", default=False,
-                        help="Disable block rotation entirely")
-    parser.add_argument("--num-blocks-hidden", type=int, default=DEFAULTS["num_blocks_hidden"],
-                    help="Number of blocks to hide per frame (default: 0)")
-    
-    args, _ = parser.parse_known_args(sys.argv[1:])
+_REPO_ROOT = Path(__file__).parent.resolve()
+
+DEFAULT_TEXTURES: List[str] = [
+    str(_REPO_ROOT / "textures" / "Material_003_baseColor.jpg"),
+]
+
+DEFAULT_MASK_DIR: str = str(_REPO_ROOT / "liquid_generation" / "masks")
+
+DEFAULT_OUTPUT_DIR: str = str(_REPO_ROOT.parent / "SDG_output")
+
+# ---------------------------------------------------------------------------
+# Configuration dataclasses
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class CameraConfig:
+    """Intrinsics for the synthetic camera."""
+
+    resolution: Tuple[int, int] = (1224, 1048)
+    focal_length: float = 5.94
+    h_aperture: float = 6.4
+    clip_near: float = 0.1
+    clip_far: float = 100.0
+
+
+@dataclass
+class LightConfig:
+    """Intensity and pose bounds for the warehouse light and spotlights."""
+
+    # Existing warehouse RectLight
+    ware_int_min: float = 500.0
+    ware_int_max: float = 8000.0
+
+    # Spotlight (disk lights)
+    spot_int_min: float = 20.0
+    spot_int_max: float = 2000.0
+
+    # Light colour range (shared by warehouse + spots)
+    colour_min: Vec3 = (0.875, 0.845, 0.675)
+    colour_max: Vec3 = (1.0, 1.0, 1.0)
+
+    # Spotlight 1 — side A of the pallet
+    spot1_pos_min: Vec3 = (-5.4, -1.5, 1.8)
+    spot1_pos_max: Vec3 = (-4.6, -0.9, 2.5)
+    spot1_rot_min: Vec3 = (15.0, -10.0, 0.0)
+    spot1_rot_max: Vec3 = (30.0, 10.0, 0.0)
+
+    # Spotlight 2 — side B of the pallet
+    spot2_pos_min: Vec3 = (-5.4, 0.9, 1.8)
+    spot2_pos_max: Vec3 = (-4.6, 1.5, 2.5)
+    spot2_rot_min: Vec3 = (-30.0, -10.0, 0.0)
+    spot2_rot_max: Vec3 = (-15.0, 10.0, 0.0)
+
+
+@dataclass
+class DecalConfig:
+    """Liquid-contaminant decal appearance ranges."""
+
+    mask_dir: str = DEFAULT_MASK_DIR
+    shader_path: str = DECAL_SHADER_PATH
+
+    # Standard brownish contaminant colour
+    diff_colour_min: Vec3 = (0.005, 0.010, 0.030)
+    diff_colour_max: Vec3 = (0.080, 0.060, 0.020)
+
+    # Wider colour gamut when --colourful is set
+    colourful: bool = True
+    colourful_low: Vec3 = (0.002, 0.002, 0.002)
+    colourful_high: Vec3 = (0.35, 0.35, 0.35)
+
+    roughness_min: float = 0.15
+    roughness_max: float = 0.4
+
+
+@dataclass
+class BlockConfig:
+    """Pallet-block rotation and visibility settings (EPAL only)."""
+
+    enabled: bool = True
+    rot_max_deg: float = 90.0
+    num_rotated: int = 1
+    num_hidden: int = 0
+    schedule_path: Optional[str] = None
+
+
+@dataclass
+class RenderConfig:
+    """Path-tracing vs real-time render settings."""
+
+    use_path_tracing: bool = False
+    spp: int = 32
+    total_spp: int = 64
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+
+def parse_args() -> argparse.Namespace:
+    """Build the argument parser and return parsed CLI flags."""
+    p = argparse.ArgumentParser(
+        description="Pallet SDG replicator (PalletStack)",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+
+    # Scene
+    p.add_argument("--pallet-type", type=str, default="epal",
+                    choices=ACCEPTED_PALLET_TYPES)
+    p.add_argument("--output-dir", type=str, default=DEFAULT_OUTPUT_DIR)
+    p.add_argument("--num-frames", type=int, default=5,
+                    help="Frames to generate (keep low for test runs)")
+
+    # Lighting
+    p.add_argument("--ware-int-min", type=float, default=500.0)
+    p.add_argument("--ware-int-max", type=float, default=8000.0)
+    p.add_argument("--spot-int-min", type=float, default=20.0)
+    p.add_argument("--spot-int-max", type=float, default=2000.0)
+
+    # Textures (EPAL only)
+    p.add_argument("--textures", type=str, default=None,
+                    help="Glob pattern for wood textures")
+
+    # Liquid decal (NLP, or EPAL if explicitly enabled)
+    p.add_argument("--gen-liquid", action="store_true", default=False,
+                    help="Enable liquid-contaminant decal randomisation")
+    p.add_argument("--mask-dir", type=str, default=DEFAULT_MASK_DIR)
+    p.add_argument("--shader-path", type=str, default=DECAL_SHADER_PATH)
+    p.add_argument("--colourful", action="store_true", default=True,
+                    help="Use wider colour gamut for decal")
+
+    # Block rotation (EPAL only)
+    p.add_argument("--no-block-rot", action="store_true", default=False)
+    p.add_argument("--block-rot-max", type=float, default=90.0)
+    p.add_argument("--num-block-rot", type=int, default=1)
+    p.add_argument("--num-blocks-hidden", type=int, default=0)
+    p.add_argument("--rotation-schedule", type=str, default=None,
+                    help="JSON rotation schedule (overrides random block rotation)")
+    p.add_argument("--block-base-path", type=str, default=BLOCK_BASE_PATH)
+
+    # Render
+    p.add_argument("--path-tracing", action="store_true", default=False)
+    p.add_argument("--spp", type=int, default=32)
+    p.add_argument("--total-spp", type=int, default=64)
+
+    args, _ = p.parse_known_args(sys.argv[1:])
     return args
 
-def check_pallet_type(pal_type: str) -> str:
-    if not pal_type in ACCEPTED_PALLET_TYPES:
-        sys.exit(f"Error: Unacceptable pallet type: {pal_type}")
-    return pal_type
 
-def set_render_mode() -> int:
-    #mode: 'PathTracing' or 'RaytracedLighting'"""
-    s = carb.settings.get_settings()
-    if USE_PATH_TRACING:
-        s.set("/rtx/rendermode", "PathTracing")
-        s.set_int("/rtx/pathtracing/spp", SPP)
-        s.set_int("/rtx/pathtracing/totalSpp", TOTAL_SPP)  # MUST be > 0
-        return TOTAL_SPP//SPP
-    else:
-        s.set("/rtx/rendermode", "RaytracedLighting")
-        return 1
-
-
-# Spherical Camera Placement
-def sample_camera_positions(
-    n: int,
-    centre: Tuple[float, float, float],
-    dist_min: float,
-    dist_max: float,
-    elev_min_deg: float,
-    elev_max_deg: float) -> List[Tuple[float, float, float]]:
-    """
-    Sample n camera positions on a sphere around centre.
-    elevation is clamped to avoid ground-level or pure top-down shots.
-
-    Args:
-        n:            Number of positions to sample.
-        centre:       World-space target point (pallet centre).
-        dist_min:     Minimum distance from centre in metres.
-        dist_max:     Maximum distance from centre in metres.
-        elev_min_deg: Minimum elevation angle in degrees (above horizon).
-        elev_max_deg: Maximum elevation angle in degrees.
-
-    Returns:
-        List of (x, y, z) camera positions in world space.
-    """
-    positions: List[Tuple[float, float, float]] = []
-    for _ in range(n):
-        distance: float  = random.uniform(dist_min, dist_max)
-        azimuth: float   = random.uniform(0.0, 360.0)          # degrees, full circle
-        elevation: float = random.uniform(elev_min_deg, elev_max_deg)  # degrees
-
-        az_rad: float    = math.radians(azimuth)
-        el_rad: float    = math.radians(elevation)
-
-        x: float = centre[0] + distance * math.cos(el_rad) * math.sin(az_rad)
-        y: float = centre[1] + distance * math.sin(el_rad)
-        z: float = centre[2] + distance * math.cos(el_rad) * math.cos(az_rad)
-
-        positions.append((x, y, z))
-
-    return positions
-
-def find_textures(texture_dict: str) -> List[str]:
-    if texture_dict is None:
-        return TEXTURES
-    else:
-        return sorted(glob.glob(texture_dict + "texture_*.png"))
-
-def establish_masks(mask_dir) -> List[str]:
-    mask_paths = sorted(glob.glob(mask_dir + "liquid_mask_*.png"))
-    if not mask_paths:
-        sys.exit(f"Error: --gen-liquid requested but no liquid_mask_*.png files found in {mask_dir}")
-    return mask_paths
-
-def create_camera() -> HydraTexture:
-    # Create the SDG camera and render product matching given intrinsics
-    camera = rep.create.camera(
-        focal_length=FOCAL_LENGTH,
-        horizontal_aperture=H_APERTURE,
-        clipping_range=(0.1, 100.0),
-        name="Camera"
+def build_configs(
+    args: argparse.Namespace,
+) -> Tuple[CameraConfig, LightConfig, DecalConfig, BlockConfig, RenderConfig]:
+    """Translate flat CLI namespace into typed config dataclasses."""
+    cam = CameraConfig()
+    light = LightConfig(
+        ware_int_min=args.ware_int_min,
+        ware_int_max=args.ware_int_max,
+        spot_int_min=args.spot_int_min,
+        spot_int_max=args.spot_int_max,
     )
-    render_product: HydraTexture = rep.create.render_product(camera, RESOLUTION)
-    return camera, render_product
+    decal = DecalConfig(
+        mask_dir=args.mask_dir,
+        shader_path=args.shader_path,
+        colourful=args.colourful,
+    )
+    block = BlockConfig(
+        enabled=not args.no_block_rot,
+        rot_max_deg=args.block_rot_max,
+        num_rotated=args.num_block_rot,
+        num_hidden=args.num_blocks_hidden,
+        schedule_path=args.rotation_schedule,
+    )
+    render = RenderConfig(
+        use_path_tracing=args.path_tracing,
+        spp=args.spp,
+        total_spp=args.total_spp,
+    )
+    return cam, light, decal, block, render
 
-def create_lights() -> Tuple:
-    #Create lights with baseline intensities
-    key_light = rep.create.light(
-        light_type="Distant", intensity=600,
-        color=(1.0, 0.97, 0.9), rotation=(225, 0, 0), name="KeyLight")
 
-    fill_light = rep.create.light(
-        light_type="Sphere", intensity=400,
-        color=(0.8, 0.85, 1.0), position=(-3.0, 2.0, 1.0), name="FillLight")
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
-    dome_light = rep.create.light(light_type="Dome", intensity=300, name="DomeLight")
-    return key_light, fill_light, dome_light
 
-def randomize_camera(
-        camera,camera_positions: List[Tuple[float, float, float]], pallet_path: str) -> None:
-    #Randomize camera position each frame, always looking at the pallet
+def block_paths(base: str, count: int = TOTAL_BLOCKS) -> List[str]:
+    """Return USD prim paths for each pallet block (EPAL)."""
+    return [f"{base}{i}" for i in range(count)]
+
+
+def find_textures(pattern: Optional[str]) -> List[str]:
+    """Resolve texture file paths from a glob or fall back to defaults."""
+    if pattern is None:
+        return DEFAULT_TEXTURES
+    found = sorted(glob.glob(pattern))
+    if not found:
+        print(f"[warn] No textures matched '{pattern}'; using defaults.")
+        return DEFAULT_TEXTURES
+    return found
+
+
+def load_masks(mask_dir: str) -> List[str]:
+    """Glob liquid_mask_*.png files; exit if none found."""
+    paths = sorted(glob.glob(
+        os.path.join(mask_dir.rstrip("/\\"), "liquid_mask_*.png")
+    ))
+    if not paths:
+        sys.exit(f"[error] --gen-liquid set but no liquid_mask_*.png in {mask_dir}")
+    return paths
+
+
+# ---------------------------------------------------------------------------
+# Rotation schedule
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class RotationSchedule:
+    """Parsed rotation schedule for deterministic block animation."""
+
+    focus_blocks: List[int]
+    num_frames: int
+    angle_sequences: Dict[int, List[float]]
+
+
+def load_rotation_schedule(path: str) -> RotationSchedule:
+    """Read a JSON rotation schedule produced by generate_block_rotations.py.
+
+    Expected structure::
+
+        {
+            "meta": { "focus_blocks": [0, 3, 6], ... },
+            "schedule": [ { "0": 5.0, "3": 0.0, "6": -2.0 }, ... ]
+        }
+    """
+    with open(path, "r", encoding="utf-8") as fh:
+        data: dict = json.load(fh)
+
+    meta: dict = data["meta"]
+    schedule: List[dict] = data["schedule"]
+    focus_blocks: List[int] = meta["focus_blocks"]
+
+    angle_sequences: Dict[int, List[float]] = {
+        idx: [entry.get(str(idx), 0.0) for entry in schedule]
+        for idx in focus_blocks
+    }
+    return RotationSchedule(
+        focus_blocks=focus_blocks,
+        num_frames=len(schedule),
+        angle_sequences=angle_sequences,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Camera
+# ---------------------------------------------------------------------------
+
+
+def create_camera(cfg: CameraConfig) -> Tuple:
+    """Create the SDG camera and its render product."""
+    camera = rep.create.camera(
+        focal_length=cfg.focal_length,
+        horizontal_aperture=cfg.h_aperture,
+        clipping_range=(cfg.clip_near, cfg.clip_far),
+        position=DEFAULT_CAMERA_POSITIONS[0],
+        look_at=CAMERA_LOOKAT,
+        name="SDGCamera",
+    )
+    rp = rep.create.render_product(camera, cfg.resolution)
+    return camera, rp
+
+
+# ---------------------------------------------------------------------------
+# Lights
+# ---------------------------------------------------------------------------
+
+
+def create_spotlights() -> Tuple:
+    """Create two disk lights aimed at opposite sides of the pallet."""
+    spot1 = rep.create.light(
+        light_type="disk",
+        position=(-5.0, -1.2, 2.2), rotation=(20, 0, 0),
+        scale=(0.2, 0.2, 0.2), intensity=1000.0,
+        color=(1.0, 1.0, 1.0), name="Spotlight1",
+    )
+    spot2 = rep.create.light(
+        light_type="disk",
+        position=(-5.0, 1.2, 2.2), rotation=(-20, 0, 0),
+        scale=(0.2, 0.2, 0.2), intensity=1000.0,
+        color=(1.0, 1.0, 1.0), name="Spotlight2",
+    )
+    return spot1, spot2
+
+
+# ---------------------------------------------------------------------------
+# Per-frame randomisers
+# ---------------------------------------------------------------------------
+
+
+def randomize_camera(camera: rep.create.camera) -> None:
+    """Pick a random pre-tuned position and orient toward the pallet."""
     with camera:
-        rep.modify.pose(position=rep.distribution.choice(camera_positions),look_at=pallet_path)
+        rep.modify.pose(
+            position=rep.distribution.choice(DEFAULT_CAMERA_POSITIONS),
+            look_at=CAMERA_LOOKAT,
+        )
 
-def randomize_pallet(pallet) -> None:
-    #Rotate pallet each frame - maybe unnecessary given changing camera positions
+
+def randomize_pallet(pallet: rep.get.prim_at_path) -> None:
+    """Rotate the pallet to one of four cardinal orientations."""
     with pallet:
         rep.modify.pose(rotation=rep.distribution.choice(PALLET_ROTATIONS))
 
+
 def randomize_lights(
-    key_light, fill_light, dome_light,
-    key_int_min: float, key_int_max: float,
-    fill_int_min: float, fill_int_max: float,
-    dome_int_min: float, dome_int_max: float) -> None:
-    #Randomize intensity, colour, and position of all lights each frame
-    with key_light:
-        rep.modify.attribute("inputs:intensity", rep.distribution.uniform(key_int_min, key_int_max))
-        rep.modify.attribute("inputs:color",     rep.distribution.uniform((0.85,0.75,0.6), (1.0,1.0,1.0)))
-        rep.modify.pose(rotation=rep.distribution.uniform((225,-15,0), (245,15,0)))
-
-    with fill_light:
-        rep.modify.pose(position=rep.distribution.uniform((-4.0,1.0,-3.0), (4.0,4.0,3.0)))
-        rep.modify.attribute("inputs:intensity", rep.distribution.uniform(fill_int_min, fill_int_max))
-
-    with dome_light:
-        rep.modify.attribute("inputs:intensity", rep.distribution.uniform(dome_int_min, dome_int_max))
-
-def randomize_texture(pallet, textures: List[str]) -> None:
-    #Randomize base colour texture on materials each frame
-    # Just wood at the moment
-    texture = rep.distribution.choice(textures)
-    with rep.get.prims(semantics=[("class", "pallet")]):
-        rep.randomizer.texture(
-            textures=texture,
-            per_sub_mesh=False, # False to ensure all wood gelements are same texture - unfortunately assigns texture to nails
+    warehouse_light: rep.get.prim_at_path,
+    spot1: rep.create.light,
+    spot2: rep.create.light,
+    cfg: LightConfig,
+) -> None:
+    """Randomise intensity, colour, and pose of all scene lights."""
+    with warehouse_light:
+        rep.modify.attribute(
+            "inputs:intensity",
+            rep.distribution.uniform(cfg.ware_int_min, cfg.ware_int_max),
+        )
+        rep.modify.attribute(
+            "inputs:color",
+            rep.distribution.uniform(cfg.colour_min, cfg.colour_max),
         )
 
-def randomize_blocks(block_rot_max: float, num_block_rot: int, block_paths: List[str]) -> None:
-    #Randomly twist individual pallet blocks around the vertical (Y) axis each frame.
-    total_blocks = 9
-    indices_to_rotate = random.sample(range(total_blocks), min(num_block_rot, total_blocks))
+    with spot1:
+        rep.modify.attribute(
+            "inputs:intensity",
+            rep.distribution.uniform(cfg.spot_int_min, cfg.spot_int_max),
+        )
+        rep.modify.attribute(
+            "inputs:color",
+            rep.distribution.uniform(cfg.colour_min, cfg.colour_max),
+        )
+        rep.modify.pose(
+            position=rep.distribution.uniform(cfg.spot1_pos_min, cfg.spot1_pos_max),
+            rotation=rep.distribution.uniform(cfg.spot1_rot_min, cfg.spot1_rot_max),
+        )
 
-    for i, block_path in enumerate(block_paths):
-        block = rep.get.prim_at_path(block_path)
+    with spot2:
+        rep.modify.attribute(
+            "inputs:intensity",
+            rep.distribution.uniform(cfg.spot_int_min, cfg.spot_int_max),
+        )
+        rep.modify.attribute(
+            "inputs:color",
+            rep.distribution.uniform(cfg.colour_min, cfg.colour_max),
+        )
+        rep.modify.pose(
+            position=rep.distribution.uniform(cfg.spot2_pos_min, cfg.spot2_pos_max),
+            rotation=rep.distribution.uniform(cfg.spot2_rot_min, cfg.spot2_rot_max),
+        )
+
+
+def randomize_texture(textures: List[str]) -> None:
+    """Swap the base-colour texture on pallet materials (EPAL)."""
+    with rep.get.prims(semantics=[("class", "pallet")]):
+        rep.randomizer.texture(
+            textures=rep.distribution.choice(textures),
+            per_sub_mesh=False,
+        )
+
+
+def randomize_decal(
+    shader: rep.get.prim_at_path,
+    mask_paths: List[str],
+    cfg: DecalConfig,
+) -> None:
+    """Randomise contaminant mask, colour, and roughness on the decal shader."""
+    with shader:
+        rep.modify.attribute(
+            "inputs:opacity_texture",
+            rep.distribution.choice(mask_paths),
+        )
+        if cfg.colourful:
+            rep.modify.attribute(
+                "inputs:diffuse_color_constant",
+                rep.distribution.uniform(cfg.colourful_low, cfg.colourful_high),
+            )
+        else:
+            rep.modify.attribute(
+                "inputs:diffuse_color_constant",
+                rep.distribution.uniform(cfg.diff_colour_min, cfg.diff_colour_max),
+            )
+        rep.modify.attribute(
+            "inputs:reflection_roughness_constant",
+            rep.distribution.uniform(cfg.roughness_min, cfg.roughness_max),
+        )
+
+
+def randomize_blocks_random(paths: List[str], cfg: BlockConfig) -> None:
+    """Randomly twist a subset of pallet blocks around the Z axis."""
+    indices = random.sample(range(len(paths)), min(cfg.num_rotated, len(paths)))
+    for i, bp in enumerate(paths):
+        block = rep.get.prim_at_path(bp)
         with block:
-            if i in indices_to_rotate:
-                twist = random.uniform(-block_rot_max, block_rot_max)
+            if i in indices:
+                twist = random.uniform(-cfg.rot_max_deg, cfg.rot_max_deg)
                 rep.modify.pose(rotation=(0.0, 0.0, twist))
             else:
                 rep.modify.pose(rotation=(0.0, 0.0, 0.0))
 
-def randomize_block_visibility(num_blocks_hidden: int, block_paths: List[str]) -> None:
-    # Recreate missing blocks
-    indices_to_hide = random.sample(range(len(block_paths)), min(num_blocks_hidden, len(block_paths)))
 
-    for i, block_path in enumerate(block_paths):
-        block = rep.get.prim_at_path(block_path)
+def apply_scheduled_rotations(
+    schedule: RotationSchedule,
+    base_path: str,
+) -> None:
+    """Wire deterministic per-block rotation sequences from a JSON schedule.
+
+    Uses ``rep.distribution.sequence`` so each frame advances one step.
+    """
+    for block_idx in schedule.focus_blocks:
+        prim_path = f"{base_path}{block_idx}"
+        block = rep.get.prim_at_path(prim_path)
         with block:
-            if i in indices_to_hide:
-                rep.modify.visibility(visible=False)
-            else:
-                rep.modify.visibility(visible=True)
+            rep.modify.pose(
+                rotation=rep.distribution.sequence(
+                    [(0.0, 0.0, a) for a in schedule.angle_sequences[block_idx]]
+                ),
+            )
 
-def randomize_decal(shader, mask_paths: str) -> None:
-    with shader:
-        rep.modify.attribute(
-            "inputs:opacity_texture",
-            rep.distribution.choice(mask_paths)
-        )
 
-def attach_writer(render_product: HydraTexture, output_dir: str) -> Writer:
-    #Initialise BasicWriter with all required annotators and attach to render product
-    writer: Writer = rep.WriterRegistry.get("BasicWriter")
+def randomize_block_visibility(paths: List[str], num_hidden: int) -> None:
+    """Hide a random subset of blocks to simulate missing blocks."""
+    hide_indices = random.sample(range(len(paths)), min(num_hidden, len(paths)))
+    for i, bp in enumerate(paths):
+        block = rep.get.prim_at_path(bp)
+        with block:
+            rep.modify.visibility(visible=(i not in hide_indices))
+
+
+# ---------------------------------------------------------------------------
+# Writer
+# ---------------------------------------------------------------------------
+
+
+def attach_writer(render_product, output_dir: str) -> rep.WriterRegistry:
+    """Initialise BasicWriter and attach to the render product."""
+    writer = rep.WriterRegistry.get("BasicWriter")
     writer.initialize(
         output_dir=output_dir,
         rgb=True,
         bounding_box_2d_tight=False,
-        bounding_box_2d_loose=False,
-        bounding_box_3d=False,
-        instance_segmentation=False,
         semantic_segmentation=False,
-        distance_to_camera=False,
-        pointcloud=False,
-        pointcloud_include_unlabelled=False,
-        normals=False,
-        camera_params=False,
+        semantic_filter_predicate="class:focus_pallet",
     )
     writer.attach([render_product])
     return writer
 
-def get_frame_stats():
-    h = hstats.HydraEngineStats()
-    result = h.get_gpu_profiler_result()
-    if result and result[0]:
-        frame_ms = result[0][0]["duration"]
-        fps = 1000.0 / frame_ms if frame_ms > 0 else 0.0
-        return fps, frame_ms
-    return None, None
-    
-def write_run_summary(output_dir, num_frames, pal_type, gen_liquid, args):
-    fps, frame_ms = get_frame_stats()
-    render_mode = carb.settings.get_settings().get("/rtx/rendermode")
 
-    os.makedirs(output_dir, exist_ok=True)
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    summary_path = os.path.join(output_dir, f"run_summary_{timestamp}.txt")
+# ---------------------------------------------------------------------------
+# Render mode
+# ---------------------------------------------------------------------------
+
+
+def configure_render(cfg: RenderConfig) -> int:
+    """Apply path-tracing or real-time settings; return sub-frame count."""
+    settings = carb.settings.get_settings()
+    if cfg.use_path_tracing:
+        settings.set("/rtx/rendermode", "PathTracing")
+        settings.set_int("/rtx/pathtracing/spp", cfg.spp)
+        settings.set_int("/rtx/pathtracing/totalSpp", cfg.total_spp)
+        return cfg.total_spp // cfg.spp
+    settings.set("/rtx/rendermode", "RaytracedLighting")
+    return 1
+
+
+# ---------------------------------------------------------------------------
+# Run summary
+# ---------------------------------------------------------------------------
+
+
+def write_run_summary(
+    args: argparse.Namespace,
+    cam_cfg: CameraConfig,
+    light_cfg: LightConfig,
+    block_cfg: BlockConfig,
+    render_cfg: RenderConfig,
+    num_frames: int,
+) -> None:
+    """Persist a human-readable summary of the generation run."""
+    os.makedirs(args.output_dir, exist_ok=True)
+    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    path = os.path.join(args.output_dir, f"run_summary_{ts}.txt")
+
+    render_mode = carb.settings.get_settings().get("/rtx/rendermode")
 
     lines = [
         "=== SDG Run Summary ===",
-        f"Timestamp:         {timestamp}",
-        f"",
-        f"--- Scene ---",
-        f"Pallet type:       {pal_type}",
-        f"Pallet path:       {args.pallet_path}",
-        f"Contaminant decal: {gen_liquid}",
-        f"",
-        f"--- Output ---",
-        f"Output dir:        {args.output_dir}",
-        f"Num frames:        {num_frames}",
-        f"Resolution:        {RESOLUTION[0]}x{RESOLUTION[1]}",
-        f"",
-        f"--- Camera ---",
-        f"Focal length:      {FOCAL_LENGTH} mm",
-        f"Horizontal apt:    {H_APERTURE} mm",
-        f"Distance range:    {args.cam_dist_min} – {args.cam_dist_max} m",
-        f"Elevation range:   {args.cam_elev_min} – {args.cam_elev_max} deg",
-        f"",
-        f"--- Lighting ---",
-        f"Key intensity:     {args.key_int_min} – {args.key_int_max}",
-        f"Fill intensity:    {args.fill_int_min} – {args.fill_int_max}",
-        f"Dome intensity:    {args.dome_int_min} – {args.dome_int_max}",
-        f"",
-        f"--- Block Modifications ---",
-        f"Enabled:           {not args.no_block_rot}",
-        f"Blocks rotated:    {args.num_block_rot} / {len(BLOCK_PATHS)}",
-        f"Max twist angle:   +/- {args.block_rot_max} deg",
-        f"Blocks hidden:     {args.num_blocks_hidden} / {len(BLOCK_PATHS)}",
-        f"",
-        f"--- Render ---",
-        f"Render mode:       {render_mode}",
-        f"Path tracing:      {USE_PATH_TRACING}",
-        f"SPP / Total SPP:   {SPP} / {TOTAL_SPP}" if USE_PATH_TRACING else f"SPP / Total SPP:   N/A (realtime)",
-        f"GPU frame time:    {frame_ms:.2f} ms" if frame_ms else f"GPU frame time:    N/A",
-        f"FPS:               {fps:.1f}" if fps else f"FPS:               N/A",
+        f"Timestamp:           {ts}",
+        "",
+        "--- Scene ---",
+        f"Pallet type:         {args.pallet_type}",
+        f"Pallet prim:         {PALLET_PRIM_PATHS[args.pallet_type]}",
+        f"Liquid decal:        {args.gen_liquid}",
+        f"Rotation schedule:   {args.rotation_schedule or 'none (random)'}",
+        "",
+        "--- Output ---",
+        f"Output dir:          {args.output_dir}",
+        f"Num frames:          {num_frames}",
+        f"Resolution:          {cam_cfg.resolution[0]}×{cam_cfg.resolution[1]}",
+        "",
+        "--- Camera ---",
+        f"Focal length:        {cam_cfg.focal_length} mm",
+        f"Horizontal aperture: {cam_cfg.h_aperture} mm",
+        f"Look-at:             {CAMERA_LOOKAT}",
+        f"Positions:           {len(DEFAULT_CAMERA_POSITIONS)} viewpoints",
+        "",
+        "--- Lighting ---",
+        f"Warehouse intensity: {light_cfg.ware_int_min} – {light_cfg.ware_int_max}",
+        f"Spotlight intensity: {light_cfg.spot_int_min} – {light_cfg.spot_int_max}",
+        "",
+        "--- Block Rotation ---",
+        f"Enabled:             {block_cfg.enabled}",
+        f"Schedule:            {block_cfg.schedule_path or 'random'}",
+        f"Random blocks/frame: {block_cfg.num_rotated} / {TOTAL_BLOCKS}",
+        f"Max twist:           ±{block_cfg.rot_max_deg}°",
+        f"Blocks hidden:       {block_cfg.num_hidden} / {TOTAL_BLOCKS}",
+        "",
+        "--- Render ---",
+        f"Render mode:         {render_mode}",
+        f"Path tracing:        {render_cfg.use_path_tracing}",
+        (f"SPP / Total SPP:     {render_cfg.spp} / {render_cfg.total_spp}"
+         if render_cfg.use_path_tracing else "SPP / Total SPP:     N/A (realtime)"),
     ]
 
-    with open(summary_path, "w") as f:
-        f.write("\n".join(lines) + "\n")
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write("\n".join(lines) + "\n")
+    print(f"[summary] Written to {path}")
 
-    print(f"[Summary] Written to {summary_path}")
 
-    
-async def run_replicator(num_frames: int, output_dir: str, pal_type:str, gen_liquid: bool, args) -> None:
-    await rep.orchestrator.run_async(num_frames=num_frames+1)#+1 for silently consumed frame in startup 
+# ---------------------------------------------------------------------------
+# Orchestration
+# ---------------------------------------------------------------------------
+
+
+async def run_replicator(
+    num_frames: int,
+    args: argparse.Namespace,
+    cam_cfg: CameraConfig,
+    light_cfg: LightConfig,
+    block_cfg: BlockConfig,
+    render_cfg: RenderConfig,
+) -> None:
+    """Run the replicator async loop, then write a summary."""
+    await rep.orchestrator.run_async(num_frames=num_frames + 1)
     await rep.orchestrator.wait_until_complete_async()
-    write_run_summary(output_dir, num_frames, pal_type, gen_liquid, args)
+    write_run_summary(args, cam_cfg, light_cfg, block_cfg, render_cfg, num_frames)
+    print(f"[replicator] Done — {num_frames} frames → {args.output_dir}")
+
 
 def main() -> None:
+    """Entry point: parse args, build the replicator graph, launch async."""
     args = parse_args()
-    pal_type: str = check_pallet_type(args.pallet_type)
 
-    subframes: int = set_render_mode()
+    if args.pallet_type not in ACCEPTED_PALLET_TYPES:
+        sys.exit(
+            f"[error] Unknown pallet type '{args.pallet_type}'. "
+            f"Expected one of {ACCEPTED_PALLET_TYPES}."
+        )
 
-    camera_positions: List[Tuple[float, float, float]] = sample_camera_positions(
-        n=args.num_frames, 
-        centre=PALLET_CENTRE[pal_type],
-        dist_min=args.cam_dist_min,
-        dist_max=args.cam_dist_max,
-        elev_min_deg=args.cam_elev_min,
-        elev_max_deg=args.cam_elev_max,
-    )
+    cam_cfg, light_cfg, decal_cfg, block_cfg, render_cfg = build_configs(args)
+
+    # Render settings
+    subframes: int = configure_render(render_cfg)
+
+    # Rotation schedule overrides --num-frames when provided
+    rot_schedule: Optional[RotationSchedule] = None
+    if block_cfg.schedule_path:
+        rot_schedule = load_rotation_schedule(block_cfg.schedule_path)
+        num_frames = rot_schedule.num_frames
+        print(
+            f"[info] Rotation schedule loaded: {num_frames} frames, "
+            f"blocks {rot_schedule.focus_blocks}"
+        )
+    else:
+        num_frames = args.num_frames
+
+    # Resolve textures (EPAL) and masks (liquid decal)
     textures: List[str] = find_textures(args.textures)
-    gen_liquid: bool = bool(args.gen_liquid)
-    if gen_liquid: mask_paths: List[str] = establish_masks(args.mask_dir)
+    mask_paths: Optional[List[str]] = None
+    if args.gen_liquid:
+        mask_paths = load_masks(decal_cfg.mask_dir)
 
+    pallet_path: str = PALLET_PRIM_PATHS[args.pallet_type]
+    bp: List[str] = block_paths(args.block_base_path)
+
+    # ── Build Replicator graph ──────────────────────────────────────────
     with rep.new_layer():
+        pallet = rep.get.prim_at_path(pallet_path)
+        camera, render_product = create_camera(cam_cfg)
 
-        pallet = rep.get.prim_at_path(args.pallet_path)
-        camera, render_product = create_camera()
-        key_light, fill_light, dome_light = create_lights()
-        if gen_liquid: shader = rep.get.prim_at_path(args.shader_path)
+        # Existing warehouse light + two new spotlights
+        warehouse_light = rep.get.prim_at_path(WAREHOUSE_LIGHT_PATH)
+        spot1, spot2 = create_spotlights()
 
-        with rep.trigger.on_frame(max_execs=args.num_frames+1, rt_subframes=subframes): #+1 for silently consumed frame in startup
-            randomize_camera(camera, camera_positions, args.pallet_path)
+        # Decal shader handle (only when liquid generation is enabled)
+        shader = (
+            rep.get.prim_at_path(decal_cfg.shader_path)
+            if args.gen_liquid else None
+        )
+
+        with rep.trigger.on_frame(max_execs=num_frames + 1, rt_subframes=subframes):
+            # Camera & pallet
+            randomize_camera(camera)
             randomize_pallet(pallet)
-            randomize_lights(
-                key_light, fill_light, dome_light,
-                args.key_int_min, args.key_int_max,
-                args.fill_int_min, args.fill_int_max,
-                args.dome_int_min, args.dome_int_max,
-            )
-            if pal_type == "epal":
-                randomize_texture(pallet, textures)
-                if not args.no_block_rot:
-                    randomize_blocks(args.block_rot_max, args.num_block_rot, BLOCK_PATHS)
-                if args.num_blocks_hidden > 0:
-                    randomize_block_visibility(args.num_blocks_hidden, BLOCK_PATHS)
-            if gen_liquid : randomize_decal(shader,mask_paths)
+
+            # Lights
+            randomize_lights(warehouse_light, spot1, spot2, light_cfg)
+
+            # EPAL-specific: texture swap and block rotation
+            if args.pallet_type == "epal":
+                randomize_texture(textures)
+
+                if rot_schedule is not None:
+                    apply_scheduled_rotations(rot_schedule, args.block_base_path)
+                elif block_cfg.enabled:
+                    randomize_blocks_random(bp, block_cfg)
+
+                if block_cfg.num_hidden > 0:
+                    randomize_block_visibility(bp, block_cfg.num_hidden)
+
+            # Liquid-contaminant decal
+            if args.gen_liquid and shader is not None and mask_paths is not None:
+                randomize_decal(shader, mask_paths, decal_cfg)
 
         attach_writer(render_product, args.output_dir)
 
-    asyncio.ensure_future(run_replicator(args.num_frames, args.output_dir, pal_type, gen_liquid, args)) 
+    # Launch async
+    asyncio.ensure_future(
+        run_replicator(num_frames, args, cam_cfg, light_cfg, block_cfg, render_cfg)
+    )
 
+
+# ---------------------------------------------------------------------------
 if __name__ == "__main__":
     main()
-

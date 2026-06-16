@@ -1,20 +1,22 @@
 import os, shutil, zipfile
 from pathlib import Path
 
-# ── CONFIG ────────────────────────────────────────────────────────────────────
-DATASET_ZIP  = r'"C:\Users\snook\Desktop\Uni_Stuff\NTNU\Thesis\Isaac-sims\databank\contam\synth_training_data.zip'
-DATASET_DIR  = r'C:\Users\snook\Desktop\Uni_Stuff\NTNU\Thesis\Isaac-sims\databank\contam\synth_training_data'
-RUNS_DIR     = r'C:\Users\snook\Desktop\Uni_Stuff\NTNU\Thesis\Isaac-sims\training_results\Contamination\Real-Data\runs'
-DRIVE_OUTPUT = r'C:\Users\snook\Desktop\Uni_Stuff\NTNU\Thesis\Isaac-sims\training_results\Contamination\Real-Data\results'
-EPOCHS       = 100
+# ── CONFIG — update these paths before running ────────────────────────────────
+from pathlib import Path
+_REPO_ROOT   = Path(__file__).parent.parent.resolve()
+DATASET_ZIP  = str(_REPO_ROOT / "databank" / "contam" / "combined_training_data.zip")
+DATASET_DIR  = str(_REPO_ROOT / "databank" / "contam" / "combined_training_data")
+RUNS_DIR     = str(_REPO_ROOT / "training_results" / "Contamination" / "Long2-Data" / "runs")
+DRIVE_OUTPUT = str(_REPO_ROOT / "training_results" / "Contamination" / "Long2-Data" / "results")
+EPOCHS       = 150
 IMG_SIZE     = 224
 BATCH        = 16
 CLASS_NAMES  = ['Contaminant', 'No_Contaminant']
 MODEL_11     = 'yolo11s'
 MODEL_26     = 'yolo26s'
 COLORS       = {MODEL_11: '#4C72B0', MODEL_26: '#DD8452'}
-CLEAR_RUNS   = False
-SKIP_TRAINING = True
+CLEAR_RUNS   = True
+SKIP_TRAINING = False
 
 def setup_dataset(dataset_zip, dataset_dir):
     """Extract dataset if needed and print image counts per split/class."""

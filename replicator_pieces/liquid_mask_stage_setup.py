@@ -1,15 +1,18 @@
 import argparse
 import sys
 import glob
+from pathlib import Path
 import omni.usd
 import omni.kit.app
 import omni.replicator.core as rep
 from pxr import UsdGeom, UsdShade, Usd, Sdf, Gf, Vt
 
+_REPO_ROOT = Path(__file__).parent.parent.resolve()
+
 DEFAULTS = {
-    "usd_path":    "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/usd_files/plastic_pallet_stack.usd",
+    "usd_path":    str(_REPO_ROOT / "usd_files" / "plastic_pallet_stack.usd"),
     "pallet_path": "/PalletStack/TopPalletNLP",
-    "mask_dir":    "C:/Users/snook/Desktop/Uni_Stuff/NTNU/Thesis/Isaac-sims/liquid_generation/masks/",
+    "mask_dir":    str(_REPO_ROOT / "liquid_generation" / "masks"),
 }
 
 DECAL_PATH:  str = "/PalletStack/TopPalletNLP/LiquidDecal"
@@ -18,7 +21,7 @@ PALLET_PATH = "/PalletStack/TopPalletNLP"
 PALLET_TO_DEACTIVATE: str = "/PalletStack/TopPalletEPAL"
 MTL_PATH:    str = "/PalletStack/TopPalletNLP/Looks/LiquidDecalMat"
 
-OUTPUT_DIR   = r"C:\Users\snook\Desktop\Uni_Stuff\NTNU\Thesis\SDG_output\block_test"
+OUTPUT_DIR   = str(_REPO_ROOT.parent / "SDG_output" / "block_test")
 RESOLUTION   = (1224, 1048)
 FOCAL_LENGTH = 5.94
 H_APERTURE   = 6.4
@@ -62,8 +65,8 @@ def apply_semantic_label(stage: Usd.Stage, pallet_path: str) -> None:
     if not prim.IsValid():
         print(f"[Setup] ERROR: prim not found at {pallet_path}")
         return
-    rep.utils._set_semantics_legacy(prim, [("class", "pallet")])
-    print(f"[Setup] Semantic label 'pallet' applied to {pallet_path}")
+    rep.utils._set_semantics_legacy(prim, [("class", "focus_pallet")])
+    print(f"[Setup] Semantic label 'focus_pallet' applied to {pallet_path}")
     
 def configure_top_pallet(stage: Usd.Stage) -> None:
     """Deactivate TopPalletEpal and activate TopPalletNLP."""
