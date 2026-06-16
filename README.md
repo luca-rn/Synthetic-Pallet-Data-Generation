@@ -140,6 +140,14 @@ Each frame is written by `BasicWriter` with:
 - **Coordinate system:** Y-up
 - **Scale:** 1 unit = 1 metre
 
+## Dataset
+
+The Synthetic dataset generated for NLP contaminants is hosted on Zenodo:
+
+**[https://zenodo.org/records/20723502](https://zenodo.org/records/20723502)**
+
+The rest of the data cannot be made available due to an NDA.
+
 ## Dependencies
 
 Install with [uv](https://github.com/astral-sh/uv) (recommended):

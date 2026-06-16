@@ -5,6 +5,7 @@ liquid_generation/masks/
 liquid_generation/pallet_temp.usd
 liquid_generation/pallet_water_viewer.html
 databank/
+databank.zip
 ptcloud_examples/pointcloud_noisy_0001.npy
 ptcloud_examples/pointcloud_noisy_0001_rgb.npy
 usd_files/plastic_pallet_stack - Copy.usd
